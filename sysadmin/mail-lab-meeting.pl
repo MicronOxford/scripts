@@ -47,7 +47,7 @@ use Email::Valid;                       # confirm it's not gibberish
 use LWP::Simple;                        # get wiki page
 use DateTime;                           # date comparisons
 
-my $from  = 'Micron staff <micron@bioch.ox.ac.uk>';
+my $from  = 'Eva Wegel <eva.wegel@bioch.ox.ac.uk>';
 my $wiki  = 'http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings';
 
 my @tos;      # list of valid emails to deliver the message
@@ -105,12 +105,12 @@ Dear all,
 
 just to remind you that there will be no lab meeting tomorrow.
 
-A list of meetings can always be found on Micron's wiki [1].
+The list of speakers can be found here:
+
+http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings
 
 Best regards,
 Eva
-
-[1] http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings
 EOF
 
 } else {
@@ -118,15 +118,15 @@ EOF
   $body = <<EOF;
 Dear all,
 
-we will meet tomorrow in the 1st floor seminar room of Biochemistry.
+we will meet tomorrow at 2 pm in the 1st floor seminar room in Biochemistry.
 The speaker will be $speaker.
 
-A list of speakers can always be found on Micron's wiki [1].
+The list of speakers can be found here:
+
+http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings
 
 Best regards,
 Eva
-
-[1] http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings
 EOF
 
 }
