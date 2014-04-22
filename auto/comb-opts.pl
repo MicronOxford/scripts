@@ -18,7 +18,7 @@ use utf8;
 
 =head1 NAME
 
-comb-opts - generates all possible combinations (cartesian product) of options
+comb-opts - generates all possible combinations (cartesian product) of options.
 
 =head1 SYNOPSIS
 
@@ -48,7 +48,8 @@ will print the following lines:
  out_file_poisson_6.tif -noise=poisson -p=6
  out_file_poisson_9.tif -noise=poisson -p=9
 
-separated by the null character so they can be used with xargs as in:
+each argument separated by the null character, and each template with a
+newline, so it can be used with xargs as in:
 
  comb-opts -p 0:3:9 -m 'gaussian|poisson' \
    'out_file_${p}_${m}.tif -p=${p} -noise=${m}' | xargs -n3 -0 \
@@ -78,11 +79,6 @@ of bash, this is pretty much the same as doing:
 
 So if this is your case, save yourself some trouble and go with it.
 
-=head1 TODO
-
-Handle whitespace in filenames, template, etc.
-
-
 =head1 SEE ALSO
 
 xargs(1)
@@ -94,9 +90,9 @@ use warnings;
 use Pod::Usage;
 use Regexp::Common;
 use Math::BigFloat;   # avoid floating point error when using numeric ranges
+use Text::ParseWords; # to split the template into parts
 
-#my $separator = "\0"; # null is always safer (to use output with xargs -0)
-
+my $separator = "\0"; # null is always safer (to use output with xargs -0)
 
 ## Input must be an even number. Two arguments per option (name and range
 ## of values) plus the template at the end.
@@ -123,7 +119,7 @@ while ($template =~ s/\${(.*?)}/\%s/) { # replace each ${key} with %s for printf
     unless grep {$1 eq $_} keys %mset;
   push (@insets, $1);
 }
-#$template .= $separator;
+$template .= $separator;
 
 ## Build the set of values for each key. This will replace each value, with a
 ## reference for an array with the complete set (even if it's only 1 element).
@@ -169,7 +165,11 @@ sub cartesian_product {
   my $n = shift;
   if ($n == $n_sets) {
     my @list = map {$prod{$_}} @insets;
-    printf $template . "\n", @list;
+    my $str = sprintf $template, @list;
+    ## The string really needs to be splitted otherwise it will be
+    ## passed as a single long argument with spaces to next command.
+    my @args = Text::ParseWords::quotewords ('\s+', 0, $str);
+    print join ($separator, @args);
   } else {
     for (my $i = 0; $i < @{$mset{$keys[$n]}}; $i++) {
       $prod{$keys[$n]} = $mset{$keys[$n]}->[$i];
