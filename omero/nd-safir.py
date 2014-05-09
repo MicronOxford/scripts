@@ -55,18 +55,34 @@ import struct
 
 import omero.scripts
 import omero.gateway
-import omero.util.script_utils
 import distutils.spawn
 
 import omero.rtypes
-from omero.rtypes import rstring, rlong, robject
 
 NDSAFIR  = distutils.spawn.find_executable("ndsafir_priism")
 TIFF2MRC = distutils.spawn.find_executable("tiff2mrc")
 
-def is_mrc (img):
+def is_image2000(img):
+    """Return true if image is a MRC image2000 file.
+
+    @type  img: OriginalFileWrapper
+    @param img: Image of unknown format.
+    @rtype: Boolean
+    @return: True if image has an mrc image 2000 file, False otherwise.
     """
-    Return true if image has an mrc image file.
+    ##  * Original MRC image2000 specs:
+    ##      http://www2.mrc-lmb.cam.ac.uk/image2000.html
+    s = img.getFileInChunks(buf=53*4).next()
+
+    ## New versions of the MRC format are supposed to have this signature
+    ## but I'm still unsure if Priism is capable of reading them...
+    if len(s) >= 53*4 and s[52*4:53*4] == "MAP ":
+        return True
+    else:
+        return False
+
+def is_mrc(img):
+    """Return true if image is an mrc (original) image file.
 
     There seems to be at least 2 variants of the MRC format. An old one
     which Priism uses, and a new version, also known as MRC Image2000.
@@ -79,30 +95,19 @@ def is_mrc (img):
     @return: True if image has an mrc file, False otherwise.
     """
     ## Docs:
-    ##  * Original MRC image2000 specs:
-    ##      http://www2.mrc-lmb.cam.ac.uk/image2000.html
     ##  * IMOD reference for file specs with mention of old format:
     ##      http://bio3d.colorado.edu/imod/doc/mrc_format.txt
     ##  * Priism take on the subject:
     ##      http://msg.ucsf.edu/IVE/IVE4_HTML/mrc2image2000.html
-    rv = False
-
-    ext = os.path.splitext (img.getName ())[1]
-    s = img.getFileInChunks (buf = 53*4).next ()
-
-    ## New versions of the MRC format are supposed to have this signature
-    ## but I'm unsure if Priism is even capable of reading them...
-    if (len (s) >= 53*4 and s[52*4:53*4] == "MAP "):
-        rv = True
     ## old versions will need to check with file extension
-    elif (ext.lower() == ".mrc"):
-        rv = True
+    ext = os.path.splitext(img.getName())[1]
+    if ext.lower() == ".mrc":
+        return True
+    else:
+        return False
 
-    return rv
-
-def is_dv (img):
-    """
-    Return true if image has a dv image file.
+def is_dv(img):
+    """Return true if image has a dv image file.
 
     @type  img: OriginalFileWrapper
     @param img: Image of unknown format.
@@ -112,13 +117,30 @@ def is_dv (img):
     ## According to bioformats's DeltavisionReader.java (which is GPL), a
     ## DV file must read 0xa0c0 or 0xc0a0 at pos 96.
     rv = False
-    s = img.getFileInChunks (buf = 98).next ()
-    if (len (s) >= 98):
-        m = struct.unpack ("H", s[96:98])
-        if (m == 49312 or m == 41152):
+    s = img.getFileInChunks(buf=98).next()
+    if len(s) >= 98:
+        m = struct.unpack("H", s[96:98])
+        if m == 49312 or m == 41152:
             rv = True
     return rv
 
+def is_tiff(img):
+    """Return true if image is a tiff image file.
+
+    @type  img: OriginalFileWrapper
+    @param img: Image of unknown format.
+    @rtype: Boolean
+    @return: True if image has a tiff file, False otherwise.
+    """
+    rv = False
+    s = img.getFileInChunks(buf=4).next()
+    if len(s) >= 4:
+        bito = s[0:2]
+        magk = s[2:4]
+        if ((bito == "II" and struct.unpack("<H", magk)[0] == 42) or
+            (bito == "MM" and struct.unpack(">H", magk)[0] == 42)):
+            rv = True
+    return rv
 
 def get_valid_fpath(img):
     """
@@ -150,7 +172,7 @@ def get_valid_fpath(img):
     return vpath
 
 
-def run_ndsafir (imgs, params, client):
+def run_ndsafir (args, img, client):
     """
     Run ndsafir program on the image.
 
@@ -164,12 +186,6 @@ def run_ndsafir (imgs, params, client):
 
     if not NDSAFIR:
         raise Exception ("Unable to find ndsafir_priism in the system")
-
-    ## Construct args we will use when calling ndsafir_priism
-    opts = []
-    opts.append ("-noise=%s"    % params["noise_model"])
-    opts.append ("-p=%s"        % params["patch_radius"])
-    opts.append ("-sampling=%s" % params["sampling"])
 
     ## For whatever reason, the ndsafir version we got seems to only work with
     ## MRC files. When a TIFF file is used, it just hangs forever and takes up
@@ -193,7 +209,7 @@ def run_ndsafir (imgs, params, client):
 #        os.unlink (fin)
 #        os.unlink (fout)
 
-def get_ndsafir_args (params):
+def get_ndsafir_args(params):
     """Build list of input args to call ndsafir.
 
     @type  params: dict
@@ -208,6 +224,9 @@ def get_ndsafir_args (params):
     ## non-option input file will comes before the actual options.
     opts = []
     try:
+        ## We don't really need the for loop since we will have to treat each
+        ## field in a different way. We are only using it to generate error
+        ## messages if it fails.
         for key, val in params.iteritems():
             opt = ""
 
@@ -242,16 +261,19 @@ def get_ndsafir_args (params):
                     raise ValueError("`island threshold' must be non-negative")
                 opt = "-island=%f" % val
 
+            ## FIXME https://github.com/openmicroscopy/openmicroscopy/issues/2449
+#            elif key == "adaptability":
+
             else:
                 continue
 
             opts.append(opt)
 
-        ## FIXME: client.getInputKeys() will not get keys with no value. This
-        ##        should probably be fixed upstream and then moved back into
-        ##        the loop over key names.
-        ## sampling is a bit trickier because it's optional so it can
-        ## be dependent on patch radius.
+        ## FIXME: client.getInputKeys() will not get keys with no value but
+        ##        seems like they don't want to fix this upstream. See
+        ##        https://github.com/openmicroscopy/openmicroscopy/issues/2462
+        ## The option sampling is a bit trickier because it's optional and
+        ## can be dependent on patch radius.
         if "sampling" not in params.keys():
             val = params["patch_radius"] +1 # default
         else:
@@ -260,37 +282,48 @@ def get_ndsafir_args (params):
             val = params["sampling"]
         opts.append("-sampling=%i" % val)
 
-    ## catch issues with printf style
-    except TypeError as e:
-        raise "option %s - %s" % (key, str (e))
-
     except Exception as e:
-        raise "bad value for option %s" % key
+        raise ValueError("option %s - %s" % (key, str(e)))
+
+    ## handle the dimensionality option
+    dims = ""
+    for key in ["z-slices", "time", "wavelength"]:
+        if params.get(key):
+            dims += key[0]
+    ndims = 2 + len(dims)
+    if ndims == 2:
+        opt = "-2d"
+    elif ndims > 2 and ndims < 5:
+        opt = "-%id=%s" % (ndims, dims)
+    else:
+        opt = "-5d"
+    opts.append(opt)
 
     return opts
 
-## TODO we should contribute this to script_utils
-def get_images(client, params):
+## TODO we should contribute this to script_utils. See discussion at
+##      https://github.com/openmicroscopy/openmicroscopy/issues/2439
+def get_images(conn, ids, Data_Type="Image"):
     """Get images from IDs, either image or dataset IDs.
 
-    @type  client: omero.scripts.client
-    @param client: Connect.
-    @type  params: dict
-    @param params: parameters given to the client, with at least the fields Ids
-    and Data_Type.
+    @type  conn: omero.gateway._BlitzGateway
+    @param conn: Connect.
+    @type  ids: list of longs        dims += key[0]
+    @param ids: IDs to retrieve
+    @type  Data_Type: string
+    @param Data_Type: the Data type of the IDs. Defaults to Image, but can also
+    be Dataset in which case it returns the images for all datasets.
 
-    @rtype:  _ImageWrapper
+    @rtype:  list of _ImageWrapper
     @return: List of all images corresponding to the listed IDs.
     """
-    conn = omero.gateway.BlitzGateway(client_obj=client)
-    objs, msg = omero.util.script_utils.getObjects(conn, params)
-
-    if params["Data_Type"] == "Image":
+    objs = (conn.getObjects(Data_Type, ids))
+    if Data_Type == "Image":
         imgs = objs
     else:
         ## flatten list from generators
         imgs = [img for ds in objs for img in ds.listChildren()]
-    return imgs, msg
+    return imgs
 
 def main(doc):
     """Main entry point of the script, as called by the client via the
@@ -300,10 +333,10 @@ def main(doc):
     @param doc: Help/Documentation to be displayed at start of plugin.
     """
 
-    ## TODO still missing more options from the application
     ## FIXME it seems that we can't group related options together without
     ##       having a parent and a parent requires some sort of an option.
-    client = omero.scripts.client (
+    ##       See https://github.com/openmicroscopy/openmicroscopy/issues/2463
+    client = omero.scripts.client(
         "Denoise image with ND-SAFIR",
         doc,
 
@@ -387,23 +420,27 @@ def main(doc):
     )
 
     try:
-        ## FIXME: remove the unwrap in later versions (post 5.0.1). See
-        ##          https://github.com/openmicroscopy/openmicroscopy/issues/2439
-        ## FIXME: remove the session=None option to parseInputs in later
-        ##        versions (post 5.0.1). See
-        ##          https://github.com/openmicroscopy/openmicroscopy/pull/2438
-        params = omero.rtypes.unwrap(
-            omero.util.script_utils.parseInputs(client, session=None)
+        params = client.getInputs(unwrap=True)
+        imgs   = get_images(
+            omero.gateway.BlitzGateway(client_obj=client),
+            params["IDs"],
+            Data_Type=params["Data_Type"],
         )
-        imgs, msg = get_images(client, params)
 
         if not imgs:
-            client.setOutput ("Message", rstring ("No images: %s" % msg))
+            client.setOutput("Message", omero.rtypes.rstring("No images found"))
         else:
-            run_ndsafir (imgs, params, client)
+            args = get_ndsafir_args(params)
+#            for img in imgs:
+#                fin = get_img_file(img)
+#                fout, flog = run_ndsafir(img, params)
+#                import_img()
+#                # annotate, comment, etc
+#                # remove files from filesystem
 
+        client.setOutput("Message", omero.rtypes.rstring("Finished denoising"))
     except Exception as e:
-        client.setOutput("Message", rstring("Error: %s" % str(e)))
+        client.setOutput("Message", omero.rtypes.rstring("Error: %s" % str(e)))
 
     finally:
         client.closeSession()
