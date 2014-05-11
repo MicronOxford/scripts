@@ -47,7 +47,7 @@ adaptation for patch-based image sequence restoration." Pattern Analysis and
 Machine Intelligence, IEEE Transactions on 29.6 (2007): 1096-1102.
 """
 
-import tempfile
+import tempfile     # consider replace this with omero.util.temp_files
 import os
 import os.path
 import subprocess
@@ -119,7 +119,7 @@ def is_dv(img):
     rv = False
     s = img.getFileInChunks(buf=98).next()
     if len(s) >= 98:
-        m = struct.unpack("H", s[96:98])
+        m = struct.unpack("H", s[96:98])[0]
         if m == 49312 or m == 41152:
             rv = True
     return rv
@@ -142,9 +142,8 @@ def is_tiff(img):
             rv = True
     return rv
 
-def get_valid_fpath(img):
-    """
-    Get filepath for the input file of the image.
+def get_mrc_file(img):
+    """Return filepath for a mrc file of a specific image.
 
     This will check if the imported file was a valid format for nd-safir
     in which case a path to it is returned. If not, then an OmeTIFF file
@@ -156,58 +155,68 @@ def get_valid_fpath(img):
     @return:    Filepath for a MRC file.
     """
 
-    vpath = ""
-    for f in img.getImportedImageFiles ():
-        if (is_dv (f) or is_mrc (f)):
-            ext  = os.path.splitext (f.getName ())[1]
-            tmpf = tempfile.NamedTemporaryFile (suffix = ext, delete = False)
-            for c in f.getFileInChunks ():
-                tmpf.write (c)
-            tmpf.close ()
-            vpath = tmpf.name
+    path = ""
+    ## XXX must understand when does an image have multiple imported image
+    ##     files. Depending on the answer, may require some heavy redesign.
+    ##     Hopefully it is for cases when a ND image comes from multiple
+    ##     files in which case they wouldn't be mrc files anyway.
+    for f in img.getImportedImageFiles():
+        if is_dv(f) or is_image2000(f) or is_mrc(f):
+            ext  = os.path.splitext(f.getName())[1]
+            tmpf = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+            for c in f.getFileInChunks():
+                tmpf.write(c)
+            tmpf.close()
+            path = tmpf.name
+            break
 
-    if not vpath:
-        raise Exception ("Conversion of tiff2mrc not yet implemented")
+    if not path:
+        ## TODO implement any2mrc
+        raise Exception("Conversion of into mrc format not yet implemented")
 
-    return vpath
+    return path
 
+def run_ndsafir(fin, args):
+    """Run ndsafir program on the image.
 
-def run_ndsafir (args, img, client):
+    @type  img: string
+    @param img: Path to an mrc file (our ndsafir only accepts mrc files).
+    @type  args: list
+    @param args: each of the options to use in the call to ndsafir.
     """
-    Run ndsafir program on the image.
-
-    @type  imgs:   List of _ImageWrapper
-    @param imgs:
-    @type  params: dict
-    @param params:
-    @type  client: omero.gateway._BlitzGateway
-    @param client:
-    """
-
-    if not NDSAFIR:
-        raise Exception ("Unable to find ndsafir_priism in the system")
-
     ## For whatever reason, the ndsafir version we got seems to only work with
     ## MRC files. When a TIFF file is used, it just hangs forever and takes up
     ## all CPU. Apparently, the version Sussex got works fine with TIFFs but is
     ## not multi-thread. Could it be an issue with my build?
-    for iw in imgs:
-        fin  = get_valid_fpath (iw)
-        fout = tempfile.NamedTemporaryFile (suffix = ".mrc", delete = False).name
 
-        try:
-            ## TODO create a log file to where we redirect STDOUT and STDERR
-            ##      and attache to the denoised image
-            args = [NDSAFIR, fin, fout] + opts
-            ret = subprocess.call (args)
-            if (ret != 0):
-                raise Exception ("Trouble running ND-safir")
+    if not NDSAFIR:
+        raise Exception("Unable to find ndsafir_priism in the system")
 
-        except OSError, e:
-            raise Exception ("%s execution failed: %s" % (args[0], e))
+    fout = tempfile.NamedTemporaryFile(suffix=".mrc", delete=False).name
 
-#        os.unlink (fin)
-#        os.unlink (fout)
+    args = [NDSAFIR, fin, fout] + args
+
+    log = tempfile.NamedTemporaryFile(suffix=".log", delete=False)
+    log.write("$%s\n" % " ".join(args))
+    log.flush()
+    try:
+        ## ndsafir is a bit weird about where it prints log. The actual
+        ## important stuff (the log) is being printed to stderr. Then, it
+        ## appears it has a bug which causes the sampling value to be printed
+        ## to stdout during the first iteration. This small bug means that
+        ## users would get a useless "info" file to download with "sampling=x"
+        ## so we redirect stdout to null.
+        with open(os.devnull, 'w') as null:
+            ret = subprocess.call(args, stderr=log, stdout=null)
+        if ret != 0:
+            raise Exception("trouble running ND-safir")
+    except OSError, e:
+        raise Exception("%s execution failed: %s" % (args[0], str(e)))
+    finally:
+        log.close()
+
+    flog = log.name
+    return fout, flog
 
 def get_ndsafir_args(params):
     """Build list of input args to call ndsafir.
@@ -249,7 +258,7 @@ def get_ndsafir_args(params):
                     val = "poisson"
                 elif val != "gaussian" and val != "auto":
                     raise ValueError("unknown `noise_model' %s" % val)
-                opt = "-p=%s" % val
+                opt = "-noise=%s" % val
 
             elif key == "adaptability":
                 if val < 0 or val > 10:
@@ -421,7 +430,7 @@ def main(doc):
 
     try:
         params = client.getInputs(unwrap=True)
-        imgs   = get_images(
+        imgs = get_images(
             omero.gateway.BlitzGateway(client_obj=client),
             params["IDs"],
             Data_Type=params["Data_Type"],
@@ -431,18 +440,20 @@ def main(doc):
             client.setOutput("Message", omero.rtypes.rstring("No images found"))
         else:
             args = get_ndsafir_args(params)
-#            for img in imgs:
-#                fin = get_img_file(img)
-#                fout, flog = run_ndsafir(img, params)
+            for img in imgs:
+                fin = get_mrc_file(img)
+                fout, flog = run_ndsafir(fin, args)
 #                import_img()
 #                # annotate, comment, etc
-#                # remove files from filesystem
+                for f in [fin, fout, flog]:
+                    os.unlink(f)
 
         client.setOutput("Message", omero.rtypes.rstring("Finished denoising"))
     except Exception as e:
         client.setOutput("Message", omero.rtypes.rstring("Error: %s" % str(e)))
 
     finally:
+        ## we must make sure any fin, fout, and flog, are removed if they exist
         client.closeSession()
 
 if __name__ == "__main__":
