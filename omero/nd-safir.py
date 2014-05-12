@@ -48,16 +48,17 @@ Machine Intelligence, IEEE Transactions on 29.6 (2007): 1096-1102.
 """
 
 import tempfile     # consider replace this with omero.util.temp_files
+import sys          # because omero redirection of stderr is buggy
 import os
 import os.path
 import subprocess
 import struct
+import distutils.spawn
 
 import omero.scripts
 import omero.gateway
-import distutils.spawn
-
 import omero.rtypes
+import omero.cli
 
 NDSAFIR  = distutils.spawn.find_executable("ndsafir_priism")
 TIFF2MRC = distutils.spawn.find_executable("tiff2mrc")
@@ -142,6 +143,118 @@ def is_tiff(img):
             rv = True
     return rv
 
+def get_parent_dataset(img):
+    """Return dataset ID for an image.
+    
+    This assumes that the image is only in one dataset which apparently
+    may not always be true. It can be in none or it can be in multiple.
+    
+    For now, we return the first parent in the list or None.
+    """
+    parents = img.listParents()
+    if parents:
+        for p in parents:
+            return p.getId()
+    else:
+        return None
+
+## According to joshmoore this seems to be the way to do it. Mostly copied
+## from MonitorClientI.importFile() at components/tools/OmeroFS/fsDropBoxMonitorClient.py
+##
+## It takes a ridiculous amount of time, it is very slow, but we won't bother
+## because it seems they're already trying to come up with something to do this.
+def export_image_file(client, fpath, dataset=None, name=None):
+    """Export image file to the OMERO.server.
+    
+    @type  client: omero.BaseClient
+    @param client: current connection.
+    @type  fpath: string
+    @param fpath: Path for image.
+    @type  dataset: long
+    @param dataset: dataset ID to export the image into.
+    @rtype:  ImageWrapperI
+    @return: exported image.
+    """
+
+    cli = omero.cli.CLI()
+    cli.loadplugins()
+    cmd = [
+        "-s", "localhost",
+        "-k", client.getSessionId(),
+        "import",
+    ]
+    if dataset:
+        cmd.extend(["-d", str(dataset)])
+    if name:
+        cmd.extend(["-n", str(name)])
+
+    ## The ID of exported image will be printed back to STDOUT. So we need
+    ## to catch it in file, and read that file to get its ID. And yeah, this
+    ## is a bit convoluted but it is the recommended method.
+    stdout = tempfile.NamedTemporaryFile(suffix=".stdout", delete=False)
+    cid = None
+    try:
+        ## FIXME
+        ## I would prefer to actually filter stderr so that the user can receive
+        ## actual errors. However, the debug option is not working properly.
+        ## See https://github.com/openmicroscopy/openmicroscopy/issues/2477
+        cmd.extend([
+            "---errs", os.devnull,
+            "---file", stdout.name,
+        ])
+        cmd.append(fpath)
+
+        ## FIXME https://github.com/openmicroscopy/openmicroscopy/issues/2476
+        STDERR = sys.stderr
+        try:
+            with open(os.devnull, 'w') as DEVNULL:
+                sys.stderr = DEVNULL
+                cli.invoke(cmd)
+        finally:
+            sys.stderr = STDERR
+        retCode = cli.rv
+
+        if retCode == 0:
+            ## we only need to read one line or something is very wrong
+            cid = int(stdout.readline())
+            if not cid:
+                raise Exception("unable to get exported image ID")
+        else:
+            ## I am not going to redirect stderr to a temp file, read it back
+            ## in case of an error, and then print it to stderr myself so that
+            ## the user gets a file to download with the errors. They will have
+            ## to fix this upstream so that filtering of stderr works properly
+            ## https://github.com/openmicroscopy/openmicroscopy/issues/2477
+            raise Exception("failed to import processed image into the database")
+    finally:
+        stdout.close()
+        os.unlink(stdout.name)
+
+    conn = omero.gateway.BlitzGateway(client_obj=client)
+    return conn.getObject("Image", cid)
+
+def dress_child(child, parent, attach=()):
+    """Fill a new image with data from another.
+    
+    We should make this less hardcoded in the future.
+    """
+
+    for a in attach:
+        child.linkAnnotation(a)
+    ## XXX there is a problem with this. The batch export plugin will attach
+    ##     a zip file with a tif of the image. By doing this, we will also
+    ##     attach that file to the child.
+    for a in parent.listAnnotations():
+        child.linkAnnotation(a)
+
+    child.setDescription(parent.getDescription())
+
+    ## TODO figure out how to leave a comment on the parent and child pointing
+    ##      to each other.
+
+    child.save()
+    return None
+
 def get_mrc_file(img):
     """Return filepath for a mrc file of a specific image.
 
@@ -175,6 +288,7 @@ def get_mrc_file(img):
         raise Exception("Conversion of into mrc format not yet implemented")
 
     return path
+
 
 def run_ndsafir(fin, args):
     """Run ndsafir program on the image.
@@ -422,7 +536,7 @@ def main(doc):
         ## TODO
         ## Group 3 - output options
 
-        version      = "0.0.2",
+        version      = "0.0.4",
         authors      = ["David Pinto"],
         institutions = ["Micron, University of Oxford"],
         contact      = "david.pinto@bioch.ox.ac.uk",
@@ -430,21 +544,32 @@ def main(doc):
 
     try:
         params = client.getInputs(unwrap=True)
-        imgs = get_images(
-            omero.gateway.BlitzGateway(client_obj=client),
-            params["IDs"],
-            Data_Type=params["Data_Type"],
-        )
+        conn = omero.gateway.BlitzGateway(client_obj=client)
+        imgs = get_images(conn, params["IDs"], Data_Type=params["Data_Type"])
 
         if not imgs:
             client.setOutput("Message", omero.rtypes.rstring("No images found"))
         else:
             args = get_ndsafir_args(params)
-            for img in imgs:
-                fin = get_mrc_file(img)
+            for parent in imgs:
+                basename = os.path.splitext(parent.getName())[0] + "_DN"
+
+                fin = get_mrc_file(parent)
                 fout, flog = run_ndsafir(fin, args)
-#                import_img()
-#                # annotate, comment, etc
+                child = export_image_file(
+                    client,
+                    fout,
+                    dataset=get_parent_dataset(parent),
+                    name=basename+os.path.splitext(fout)[1],
+                )
+
+                log = conn.createFileAnnfromLocalFile(
+                    flog,
+                    origFilePathAndName=basename+".log",
+                    mimetype="text/plain",
+                    desc="ndsafir log file"
+                )
+                dress_child(child, parent, attach=[log])
                 for f in [fin, fout, flog]:
                     os.unlink(f)
 
