@@ -145,10 +145,10 @@ def is_tiff(img):
 
 def get_parent_dataset(img):
     """Return dataset ID for an image.
-    
+
     This assumes that the image is only in one dataset which apparently
     may not always be true. It can be in none or it can be in multiple.
-    
+
     For now, we return the first parent in the list or None.
     """
     parents = img.listParents()
@@ -165,7 +165,7 @@ def get_parent_dataset(img):
 ## because it seems they're already trying to come up with something to do this.
 def export_image_file(client, fpath, dataset=None, name=None):
     """Export image file to the OMERO.server.
-    
+
     @type  client: omero.BaseClient
     @param client: current connection.
     @type  fpath: string
@@ -182,6 +182,7 @@ def export_image_file(client, fpath, dataset=None, name=None):
         "-s", "localhost",
         "-k", client.getSessionId(),
         "import",
+        "--debug", "ERROR",
     ]
     if dataset:
         cmd.extend(["-d", str(dataset)])
@@ -191,13 +192,14 @@ def export_image_file(client, fpath, dataset=None, name=None):
     ## The ID of exported image will be printed back to STDOUT. So we need
     ## to catch it in file, and read that file to get its ID. And yeah, this
     ## is a bit convoluted but it is the recommended method.
-    stdout = tempfile.NamedTemporaryFile(suffix=".stdout", delete=False)
     cid = None
-    try:
-        ## FIXME
-        ## I would prefer to actually filter stderr so that the user can receive
-        ## actual errors. However, the debug option is not working properly.
-        ## See https://github.com/openmicroscopy/openmicroscopy/issues/2477
+    with tempfile.NamedTemporaryFile(suffix=".stdout") as stdout:
+        ## FIXME when stuff is printed to stderr, the user will get a file
+        ##       to download with that text. Unfortunately, non-errors are
+        ##       still being printed there. The filtering is broken in 5.0.1
+        ##       but on future releases we may be able to simply not set
+        ##       "---errs" option.
+        ##       https://github.com/openmicroscopy/openmicroscopy/issues/2477
         cmd.extend([
             "---errs", os.devnull,
             "---file", stdout.name,
@@ -222,37 +224,70 @@ def export_image_file(client, fpath, dataset=None, name=None):
         else:
             ## I am not going to redirect stderr to a temp file, read it back
             ## in case of an error, and then print it to stderr myself so that
-            ## the user gets a file to download with the errors. They will have
-            ## to fix this upstream so that filtering of stderr works properly
+            ## the user gets a file to download with the errors. This is being
+            ## fixed upstream already.
             ## https://github.com/openmicroscopy/openmicroscopy/issues/2477
             raise Exception("failed to import processed image into the database")
-    finally:
-        stdout.close()
-        os.unlink(stdout.name)
 
     conn = omero.gateway.BlitzGateway(client_obj=client)
     return conn.getObject("Image", cid)
 
 def dress_child(child, parent, attach=()):
     """Fill a new image with data from another.
-    
-    We should make this less hardcoded in the future.
+
+    Most likely, this is *not* what you want to use. While at first glance
+    this looks liek a nifty way to propagate the metadata from a parent
+    image to its child, it's actually a really really bad idea. Some examples:
+
+      * if your processing changes the pixel size (such as image reconstruction,
+        you should not be importing it back.
+      * if a parent was ratted with 3 starts, the child may be worse or better.
+        By importing its tags/rates/etc, you're implying that the new child was
+        actually rated that way. Worse, you're making it impossible to identity
+        them since you can't filter them by finding unstarred/untagged images.
+      * if the parent has an attachment with the same image in a different
+        format (like Batch_export does), the child should not have this file
+        associated.
+
+    @type  child: _ImageWrapper
+    @param child: Image to be filled with metadata.
+    @type  parent: _ImageWrapper
+    @param parent: Image to copy the metadata from.
+    @type  attach: list
+    @param attach: list of AnnotationWrapper to be added to the child.
     """
 
     for a in attach:
         child.linkAnnotation(a)
-    ## XXX there is a problem with this. The batch export plugin will attach
-    ##     a zip file with a tif of the image. By doing this, we will also
-    ##     attach that file to the child.
     for a in parent.listAnnotations():
         child.linkAnnotation(a)
 
     child.setDescription(parent.getDescription())
 
-    ## TODO figure out how to leave a comment on the parent and child pointing
-    ##      to each other.
-
     child.save()
+    return None
+
+def adopt_child(parent, child):
+    """Connect two images with parent-child relationship.
+
+    Omero does not yet have a concept of parent child relationship. The best
+    we can do by now is leave a comment on the parent and the child pointing
+    to the other.
+
+    @type  parent: _ImageWrapper
+    @param parent: The parent image.
+    @type  child: _ImageWrapper
+    @param child: The child image.
+    """
+    ## TODO how to set the textValue during contruction?
+    ann = omero.gateway.CommentAnnotationWrapper()
+
+    ann.setValue("parent of Image #%s" % child.getId())
+    parent.linkAnnotation(ann)
+
+    ann.setValue("child of Image #%s" % parent.getId())
+    child.linkAnnotation(ann)
+
     return None
 
 def get_mrc_file(img):
@@ -431,7 +466,7 @@ def get_images(conn, ids, Data_Type="Image"):
 
     @type  conn: omero.gateway._BlitzGateway
     @param conn: Connect.
-    @type  ids: list of longs        dims += key[0]
+    @type  ids: list of longs
     @param ids: IDs to retrieve
     @type  Data_Type: string
     @param Data_Type: the Data type of the IDs. Defaults to Image, but can also
@@ -452,7 +487,7 @@ def main(doc):
     """Main entry point of the script, as called by the client via the
     scripting service, passing the required parameters.
 
-    @type  doc: str
+    @type  doc: string
     @param doc: Help/Documentation to be displayed at start of plugin.
     """
 
@@ -536,7 +571,7 @@ def main(doc):
         ## TODO
         ## Group 3 - output options
 
-        version      = "0.0.4",
+        version      = "0.0.6",
         authors      = ["David Pinto"],
         institutions = ["Micron, University of Oxford"],
         contact      = "david.pinto@bioch.ox.ac.uk",
@@ -547,13 +582,14 @@ def main(doc):
         conn = omero.gateway.BlitzGateway(client_obj=client)
         imgs = get_images(conn, params["IDs"], Data_Type=params["Data_Type"])
 
-        if not imgs:
-            client.setOutput("Message", omero.rtypes.rstring("No images found"))
-        else:
-            args = get_ndsafir_args(params)
-            for parent in imgs:
+        args = get_ndsafir_args(params)
+        nbad = 0
+        nimgs = 0 # imgs is a generator so we can't use len(imgs)
+        for parent in imgs:
+            nimgs += 1
+            try:
+                fin = fout = flog = "" # so its defined to unlink later
                 basename = os.path.splitext(parent.getName())[0] + "_DN"
-
                 fin = get_mrc_file(parent)
                 fout, flog = run_ndsafir(fin, args)
                 child = export_image_file(
@@ -563,22 +599,41 @@ def main(doc):
                     name=basename+os.path.splitext(fout)[1],
                 )
 
-                log = conn.createFileAnnfromLocalFile(
-                    flog,
-                    origFilePathAndName=basename+".log",
-                    mimetype="text/plain",
-                    desc="ndsafir log file"
+                adopt_child(parent, child)
+                child.linkAnnotation(
+                    conn.createFileAnnfromLocalFile(
+                        flog,
+                        origFilePathAndName=basename+".log",
+                        mimetype="text/plain",
+                    )
                 )
-                dress_child(child, parent, attach=[log])
-                for f in [fin, fout, flog]:
-                    os.unlink(f)
 
-        client.setOutput("Message", omero.rtypes.rstring("Finished denoising"))
+            except Exception as e:
+                ## TODO We are just counting the number of failures and success
+                ##      but maybe we could compile a file with all errors and
+                ##      give it back to the user at the end?
+                nbad += 1
+            finally:
+                for f in [fin, fout, flog]:
+                    try:
+                        os.unlink(f)
+                    except OSError:
+                        pass
+
+        if nimgs == 0:
+            msg = "No images selected"
+        elif nbad == nimgs:
+            msg = "Failed denoising all images"
+        elif nbad:
+            msg = "Failed denoising %i of %i images" % (nbad, nimgs)
+        else:
+            msg = "Finished denoising total of %i images" % nimgs
+        client.setOutput("Message", omero.rtypes.rstring(msg))
+
     except Exception as e:
         client.setOutput("Message", omero.rtypes.rstring("Error: %s" % str(e)))
 
     finally:
-        ## we must make sure any fin, fout, and flog, are removed if they exist
         client.closeSession()
 
 if __name__ == "__main__":
