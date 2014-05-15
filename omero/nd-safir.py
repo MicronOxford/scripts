@@ -60,8 +60,9 @@ import omero.gateway
 import omero.rtypes
 import omero.cli
 
+import numpy
+
 NDSAFIR  = distutils.spawn.find_executable("ndsafir_priism")
-TIFF2MRC = distutils.spawn.find_executable("tiff2mrc")
 
 def is_image2000(img):
     """Return true if image is a MRC image2000 file.
@@ -125,6 +126,26 @@ def is_dv(img):
             rv = True
     return rv
 
+def is_imsubs(img):
+    """Return true if image is a MRC IMSubs.
+
+    @type  img: OriginalFileWrapper
+    @param img: Image of unknown format.
+    @rtype: Boolean
+    @return: True if image has an MRC IMSubs file, False otherwise.
+    """
+    ##  * Format specs from IVE:
+    ##      http://www.msg.ucsf.edu/IVE/IVE4_HTML/IM_ref2.html
+    rv = False
+
+    s = img.getFileInChunks(buf=98).next()
+    if len(s) >= 98:
+        m = struct.unpack("H", s[96:98])[0]
+        if m == -16224:
+            rv = True
+    return rv
+
+
 def is_tiff(img):
     """Return true if image is a tiff image file.
 
@@ -142,6 +163,148 @@ def is_tiff(img):
             (bito == "MM" and struct.unpack(">H", magk)[0] == 42)):
             rv = True
     return rv
+
+def any2imsubs(img):
+    """Save image into a mrc Imsubs (Priism sub-format) file.
+
+    Priism comes a small application (tiff2mrc) that makes this conversion.
+    However, it is unable to handle the ome tiff files (can't convert
+    separately sampled tiled image), and does not preserve the original
+    image precision.
+
+    If the image is already an mrc file, you're better off using the
+    getFileInChunks() method for an individual file.
+
+    One day we should contribute this to PIL.
+
+    @type  img: ImageWrapper
+    @param img: image to export.
+    @rtype:  string
+    @return: Filepath for the generated mrc file.
+    """
+    ## File format specs - http://www.msg.ucsf.edu/IVE/IVE4_HTML/IM_ref2.html
+
+    ncols = img.getSizeX()
+    nrows = img.getSizeY()
+    nzsec = img.getSizeZ()
+    nchan = img.getSizeC()
+    ntime = img.getSizeT()
+
+    with tempfile.NamedTemporaryFile("wb", suffix=".mrc", delete=False) as f:
+        try:
+            f.write(struct.pack("2i", ncols, nrows))  # width and height
+            f.write(struct.pack("1i", nzsec * nchan * ntime)) # number of sections
+
+            pixelTypes = {
+                "int8"    : None,
+                "uint8"   : 0,
+                "int16"   : 1,
+                "uint16"  : 6,
+                "int32"   : 7,
+                "uint32"  : None,
+                "float"   : 2,
+                "double"  : None,
+                "bit"     : None,
+                "complex" : 4,
+                "doublecomplex" : None,
+            }
+
+            prc = pixelTypes[img.getPixelsType()] # image precision
+            if not prc:
+                raise TypeError("this image type cannot be converted to mrc")
+
+            f.write(struct.pack("4i",
+                prc,      # image mode/precision
+                0, 0, 0,  # starting point of sub image
+            ))
+
+            ## Sampling frequencies in X, Y, and Z
+            f.write(struct.pack("3i", ncols, nrows, nzsec))
+
+            ## Cell dimensions (in ångströms). For non-crystallographic data,
+            ## set to the sampling frequency times the x pixel spacing.
+            f.write(struct.pack("3f",
+                ncols * img.getPixelSizeX() * 10000,
+                nrows * img.getPixelSizeY() * 10000,
+                nzsec * img.getPixelSizeZ() * 10000,
+            ))
+
+            f.write(struct.pack("3f", 90, 90, 90))  # cell angles (usually just set to 90)
+            f.write(struct.pack("3i", 1, 2, 3))     # maps axis to dimension.
+
+            ## These values are supposed to be only for the first 2D image/plane
+            p = img.getPrimaryPixels().getPlane()
+            f.write(struct.pack("3f", p.min(), p.max(), p.mean()))
+
+            f.write(struct.pack("2i", 0, 0))      # Space group number, and extended header size
+            f.write(struct.pack("1h", -16224))    # ID value
+            f.write(struct.pack("1h", 0))         # unused
+            f.write(struct.pack("1i", 0))         # starting time index
+            f.write(struct.pack("24s", " " * 24)) # blank section
+            f.write(struct.pack("2h", 0, 0))      # organization of the extended header
+            f.write(struct.pack("2h", 1, 1))      # for sub-resolution version of image
+
+            ## Minimum and maximum intensity of each other channel. If there is
+            ## a fifth channel, its data will be later on in the header file.
+            for chan in xrange(1, min(4, nchan)):
+                p = img.getPrimaryPixels().getPlane(theC=chan)
+                f.write(struct.pack("2f", p.min(), p.max()))
+            f.write(struct.pack("%if" % ((4 - nchan) *2), *[0]*((4 - nchan) *2)))
+
+            ## Image type and stuff important if it was a normal image
+            f.write(struct.pack("6h", *[0]*6))
+
+            ## Minimum and maximum intensity of a 5th channel
+            if nchan < 5:
+                f.write(struct.pack("2f", 0.0, 0.0))
+            elif nchan == 5:
+                p = px.getPlane(theC=4)
+                f.write(struct.pack("2f", fr.min(), fr.max()))
+            else:
+                raise TypeError("mrc file cannot have more than 5 channels")
+
+            f.write(struct.pack("1h", ntime))   # number of time points
+            f.write(struct.pack("1h", 0))       # image sequence (0=ZTW, 1=WZT, 2=ZWT)
+            f.write(struct.pack("3f", 0, 0, 0)) # X, Y, and Z tilt angle
+
+            ## Number and lengths of wavelengths
+            f.write(struct.pack("1h", nchan))
+            rchan = 0 # because we don't trust to match the channels numbers
+            for chan in img.getChannels():
+                rchan += 1
+                ## some channels may not have wavelength information
+                length = chan.getEmissionWave()
+                if length:
+                    f.write(struct.pack("1h", length))
+                else:
+                    f.write(struct.pack("1h", 0))
+            if rchan != nchan:
+                ## fix the information
+                f.seek(- struct.calcsize("%ih" % (rchan+1)), 1)
+                f.write(struct.pack("1h", rchan))
+                f.seek(struct.calcsize("%ih" % rchan), 1)
+            for empty in xrange(0, 5-rchan):
+                f.write(struct.pack("1h", 0))
+
+            f.write(struct.pack("3f", 0, 0, 0))     # origin of image
+            f.write(struct.pack("i", 0))            # number of useful titles
+            f.write(struct.pack("800s", " " * 800)) # space for 10 titles
+
+            px = img.getPrimaryPixels()
+            for w in xrange(0, nchan):
+                for t in xrange(0, ntime):
+                    for z in xrange(0, nzsec):
+                        p = px.getPlane(theC=w, theT=t, theZ=z)
+                        p = numpy.flipud(p)
+                        p.tofile(f.file)
+
+        except Exception as e:
+            f.close()
+            os.unlink(f.name)
+            print str(e)
+            raise
+
+    return f.name
 
 def get_parent_dataset(img):
     """Return dataset ID for an image.
@@ -294,8 +457,8 @@ def get_mrc_file(img):
     """Return filepath for a mrc file of a specific image.
 
     This will check if the imported file was a valid format for nd-safir
-    in which case a path to it is returned. If not, then an OmeTIFF file
-    is first generated and the converted to MRC using Priism's TIFF2MRC.
+    in which case a path to it is returned. If not, then it creates one
+    from whatever data it retrieves from the omero server.
 
     @type  img: _ImageWrapper
     @param img: Image of unknown format.
@@ -309,7 +472,7 @@ def get_mrc_file(img):
     ##     Hopefully it is for cases when a ND image comes from multiple
     ##     files in which case they wouldn't be mrc files anyway.
     for f in img.getImportedImageFiles():
-        if is_dv(f) or is_image2000(f) or is_mrc(f):
+        if is_dv(f) or is_image2000(f) or is_imsubs(f) or is_mrc(f):
             ext  = os.path.splitext(f.getName())[1]
             tmpf = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
             for c in f.getFileInChunks():
@@ -319,8 +482,7 @@ def get_mrc_file(img):
             break
 
     if not path:
-        ## TODO implement any2mrc
-        raise Exception("Conversion of into mrc format not yet implemented")
+        path = any2imsubs(img)
 
     return path
 
@@ -422,10 +584,8 @@ def get_ndsafir_args(params):
             ## FIXME https://github.com/openmicroscopy/openmicroscopy/issues/2449
 #            elif key == "adaptability":
 
-            else:
-                continue
-
-            opts.append(opt)
+            if opt:
+                opts.append(opt)
 
         ## FIXME: client.getInputKeys() will not get keys with no value but
         ##        seems like they don't want to fix this upstream. See
