@@ -210,7 +210,7 @@ def any2imsubs(img):
             }
 
             prc = pixelTypes[img.getPixelsType()] # image precision
-            if not prc:
+            if prc is None:
                 raise TypeError("this image type cannot be converted to mrc")
 
             f.write(struct.pack("4i",
