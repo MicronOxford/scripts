@@ -295,6 +295,9 @@ def any2imsubs(img):
                 for t in xrange(0, ntime):
                     for z in xrange(0, nzsec):
                         p = px.getPlane(theC=w, theT=t, theZ=z)
+                        ## https://github.com/openmicroscopy/openmicroscopy/issues/2547
+                        if p.dtype == "float64":
+                            p = p.astype("float32")
                         p = numpy.flipud(p)
                         p.tofile(f.file)
 
