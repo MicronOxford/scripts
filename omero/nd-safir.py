@@ -682,7 +682,7 @@ def main(doc):
 
         ## Group 2.1 - ndsafir dimensionality
         omero.scripts.Bool(
-            "time", optional=False, default=False,
+            "time", optional=False, default=True,
             description="Look for similarities over multiple time points",
             grouping="03",
         ),
@@ -692,7 +692,7 @@ def main(doc):
             grouping="04",
         ),
         omero.scripts.Bool(
-            "z-slices", optional=False, default=False,
+            "z-slices", optional=False, default=True,
             description="Look for similarities through the image volume",
             grouping="05",
         ),
