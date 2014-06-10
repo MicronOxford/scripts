@@ -437,22 +437,25 @@ def adopt_child(parent, child):
     """Connect two images with parent-child relationship.
 
     Omero does not yet have a concept of parent child relationship. The best
-    we can do by now is leave a comment on the parent and the child pointing
-    to the other.
+    we can do by now is leave a note on the parent and the child description
+    pointing to each other. This is what a projection using Insight does for
+    example.
 
     @type  parent: _ImageWrapper
     @param parent: The parent image.
     @type  child: _ImageWrapper
     @param child: The child image.
     """
-    ## TODO how to set the textValue during contruction?
-    ann = omero.gateway.CommentAnnotationWrapper()
+    def append2description(img, relation, to):
+        desc = img.getDescription()
+        if desc and desc[-1] != "\n":
+            desc += "\n"
+        desc += "%s Image ID: %i" % (relation, to.getId())
+        img.setDescription(desc)
+        img.save()
 
-    ann.setValue("parent of Image #%s" % child.getId())
-    parent.linkAnnotation(ann)
-
-    ann.setValue("child of Image #%s" % parent.getId())
-    child.linkAnnotation(ann)
+    append2description(parent, "parent of", child)
+    append2description(child, "child of", parent)
 
     return None
 
