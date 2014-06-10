@@ -19,8 +19,8 @@
 ## TODO consider use http://micronwiki.bioch.ox.ac.uk/wiki/Priism_Denoise and
 ##      http://micronwiki.bioch.ox.ac.uk/wiki/Priism/IVE,_Denoising,_Priithon_%26_Editor
 ##      to expand what options to use on the description below.
-"""
-Run nD-SAFIR - image denoising on selected images.
+
+"""Denoise with NDSAFIR (N Dimensional Structure Adaptive FILtering).
 
 This patch-based denoising algorithm is described in Boulanger, J. et al (2007).
 Basically it makes use of redundancy in an image sequence (i.e. multiple
@@ -31,7 +31,7 @@ confusing.
 
 Options
 -------
-Documentation for each of the options is available on the [Micron wiki]
+Documentation for each of the options is available at the [Micron wiki]
 (http://micronwiki.bioch.ox.ac.uk/wiki/Ndsafir)
 
 Terms and conditions
@@ -67,10 +67,11 @@ NDSAFIR  = distutils.spawn.find_executable("ndsafir_priism")
 def is_image2000(img):
     """Return true if image is a MRC image2000 file.
 
-    @type  img: OriginalFileWrapper
-    @param img: Image of unknown format.
-    @rtype: Boolean
-    @return: True if image has an mrc image 2000 file, False otherwise.
+    Args:
+        img: omero.gateway._OriginalFileWrapper
+
+    Returns:
+        A boolean value. True if img is an mrc image 2000 file, False otherwise.
     """
     ##  * Original MRC image2000 specs:
     ##      http://www2.mrc-lmb.cam.ac.uk/image2000.html
@@ -86,15 +87,19 @@ def is_image2000(img):
 def is_mrc(img):
     """Return true if image is an mrc (original) image file.
 
-    There seems to be at least 2 variants of the MRC format. An old one
-    which Priism uses, and a new version, also known as MRC Image2000.
-    There is no "signature" on the header of the old version, we can only
-    check if the file extension is correct.
+    There seems to be multiple variants of the MRC format. The very old
+    original one, a old one which Priism uses (imsubs), another proprietary
+    bastardized version by API/GE used by softWoRx, a version used by Image2000,
+    and probably many others.
 
-    @type  img: OriginalFileWrapper
-    @param img: Image of unknown format.
-    @rtype: Boolean
-    @return: True if image has an mrc file, False otherwise.
+    For the very old versions there is no "signature" on the header, we can
+    only check if the file extension is mrc and hope for the best.
+
+    Args:
+        img: omero.gateway._OriginalFileWrapper
+
+    Returns:
+        A boolean value. True if img is an mrc file, False otherwise.
     """
     ## Docs:
     ##  * IMOD reference for file specs with mention of old format:
@@ -111,10 +116,11 @@ def is_mrc(img):
 def is_dv(img):
     """Return true if image has a dv image file.
 
-    @type  img: OriginalFileWrapper
-    @param img: Image of unknown format.
-    @rtype: Boolean
-    @return: True if image has a dv file, False otherwise.
+    Args:
+        img: omero.gateway._OriginalFileWrapper
+
+    Returns:
+        A boolean value. True if img is a dv file, False otherwise.
     """
     ## According to bioformats's DeltavisionReader.java (which is GPL), a
     ## DV file must read 0xa0c0 or 0xc0a0 at pos 96.
@@ -129,10 +135,11 @@ def is_dv(img):
 def is_imsubs(img):
     """Return true if image is a MRC IMSubs.
 
-    @type  img: OriginalFileWrapper
-    @param img: Image of unknown format.
-    @rtype: Boolean
-    @return: True if image has an MRC IMSubs file, False otherwise.
+    Args:
+        img: omero.gateway._OriginalFileWrapper
+
+    Returns:
+        A boolean value. True if img is an MRC IMSubs file, False otherwise.
     """
     ##  * Format specs from IVE:
     ##      http://www.msg.ucsf.edu/IVE/IVE4_HTML/IM_ref2.html
@@ -149,10 +156,11 @@ def is_imsubs(img):
 def is_tiff(img):
     """Return true if image is a tiff image file.
 
-    @type  img: OriginalFileWrapper
-    @param img: Image of unknown format.
-    @rtype: Boolean
-    @return: True if image has a tiff file, False otherwise.
+    Args:
+        img: omero.gateway._OriginalFileWrapper
+
+    Returns:
+        A boolean value. True if img is a tiff file, False otherwise.
     """
     rv = False
     s = img.getFileInChunks(buf=4).next()
@@ -177,10 +185,16 @@ def any2imsubs(img):
 
     One day we should contribute this to PIL.
 
-    @type  img: ImageWrapper
-    @param img: image to export.
-    @rtype:  string
-    @return: Filepath for the generated mrc file.
+    Args:
+        img: omero.gateway._ImageWrapper
+
+    Returns:
+        A string with the filepath for the generated MRC file.
+
+    Raises:
+        TypeError: if the image is of a type, or has features, not supported by
+            the MRC format. For example, binary, double, and uint32 precision
+            are not suported. Images with more than 5 channels.
     """
     ## File format specs - http://www.msg.ucsf.edu/IVE/IVE4_HTML/IM_ref2.html
 
@@ -315,7 +329,12 @@ def get_parent_dataset(img):
     This assumes that the image is only in one dataset which apparently
     may not always be true. It can be in none or it can be in multiple.
 
-    For now, we return the first parent in the list or None.
+    Args:
+        img: omero.gateway._ImageWrapper
+
+    Returns:
+        An integer with the dataset ID or None if an image is not part of
+        a dataset, such as happens with orphaned images.
     """
     parents = img.listParents()
     if parents:
@@ -332,14 +351,19 @@ def get_parent_dataset(img):
 def export_image_file(client, fpath, dataset=None, name=None):
     """Export image file to the OMERO.server.
 
-    @type  client: omero.BaseClient
-    @param client: current connection.
-    @type  fpath: string
-    @param fpath: Path for image.
-    @type  dataset: long
-    @param dataset: dataset ID to export the image into.
-    @rtype:  ImageWrapperI
-    @return: exported image.
+    Args:
+        client: omero.BaseClient to use for the import
+        fpath: a string with the filepath for the file to be imported.
+        dataset: integer with the dataset ID to where the image should be
+            imported.
+
+    Returns:
+        An omero.gateway._ImageWrapper with the imported image.
+
+    Raises:
+        Exception: if import failed for some reason or even if it was
+            successful but we couldn't manage to deduce its ID.
+
     """
 
     cli = omero.cli.CLI()
@@ -415,12 +439,16 @@ def dress_child(child, parent, attach=()):
         format (like Batch_export does), the child should not have this file
         associated.
 
-    @type  child: _ImageWrapper
-    @param child: Image to be filled with metadata.
-    @type  parent: _ImageWrapper
-    @param parent: Image to copy the metadata from.
-    @type  attach: list
-    @param attach: list of AnnotationWrapper to be added to the child.
+    Args:
+        child: omero.gateway._ImageWrapper of the image that needs to be filled
+            with metadata.
+        parent: omero.gateway._ImageWrapper of the image from where to copy the
+            metadata
+        attach: list of omero.gateway.AnnotationWrapper to be added to child in
+            addition to everything else in parent.
+
+    Returns:
+        void
     """
 
     for a in attach:
@@ -438,13 +466,18 @@ def adopt_child(parent, child):
 
     Omero does not yet have a concept of parent child relationship. The best
     we can do by now is leave a note on the parent and the child description
-    pointing to each other. This is what a projection using Insight does for
-    example.
+    pointing to each other. As long as we are using the correct syntax
+    "Image ID: number", the omero clients should interpret it as a link to
+    image.
 
-    @type  parent: _ImageWrapper
-    @param parent: The parent image.
-    @type  child: _ImageWrapper
-    @param child: The child image.
+    Note that the link was broken for Omero versions 5.0.1 and 5.0.2.
+
+    Args:
+        child: omero.gateway._ImageWrapper
+        parent: omero.gateway._ImageWrapper
+
+    Returns:
+        void
     """
     def append2description(img, relation, to):
         desc = img.getDescription()
@@ -466,10 +499,11 @@ def get_mrc_file(img):
     in which case a path to it is returned. If not, then it creates one
     from whatever data it retrieves from the omero server.
 
-    @type  img: _ImageWrapper
-    @param img: Image of unknown format.
-    @rtype:     String
-    @return:    Filepath for a MRC file.
+    Args:
+        img: omero.gateway._ImageWrapper
+
+    Returns:
+        String with filepath for a mrc file corresponding to img.
     """
 
     path = ""
@@ -496,10 +530,20 @@ def get_mrc_file(img):
 def run_ndsafir(fin, args):
     """Run ndsafir program on the image.
 
-    @type  img: string
-    @param img: Path to an mrc file (our ndsafir only accepts mrc files).
-    @type  args: list
-    @param args: each of the options to use in the call to ndsafir.
+    Args:
+        fin: a string with the filepath for the input image. Note that the
+            ndsafir version we have at the moment only accepts mrc files as
+            input.
+        args: a list with all the input arguments to pass to the ndsafir
+            application.
+
+    Returns:
+        A tuple with the filepath for the processed image on the first element,
+            and for the processing log file on the second.
+
+    Raises:
+        Exception: if unable to find the ndsafir application in the system
+            or the execution failed for some reason.
     """
     ## For whatever reason, the ndsafir version we got seems to only work with
     ## MRC files. When a TIFF file is used, it just hangs forever and takes up
@@ -538,10 +582,15 @@ def run_ndsafir(fin, args):
 def get_ndsafir_args(params):
     """Build list of input args to call ndsafir.
 
-    @type  params: dict
-    @param params: unwrapped and processed by omero.util.script_utils.parseInputs
-    @rtype:  list
-    @return: the arguments (options) that go on the end of ndsafir call.
+    Args:
+        params: a dict with all the options set during the interface.
+
+    Returns:
+        List with the corresponding command line arguments for ndsafir_priism.
+
+    Raises:
+        ValueError: in case of invalid values, e.g., negative values for
+            options that must be positive.
     """
 
     ## Construct args we will use when calling ndsafir_priism
@@ -625,21 +674,20 @@ def get_ndsafir_args(params):
 
     return opts
 
-## TODO we should contribute this to script_utils. See discussion at
-##      https://github.com/openmicroscopy/openmicroscopy/issues/2439
 def get_images(conn, ids, Data_Type="Image"):
-    """Get images from IDs, either image or dataset IDs.
+    """Get all images from IDs, either image or dataset IDs.
 
-    @type  conn: omero.gateway._BlitzGateway
-    @param conn: Connect.
-    @type  ids: list of longs
-    @param ids: IDs to retrieve
-    @type  Data_Type: string
-    @param Data_Type: the Data type of the IDs. Defaults to Image, but can also
-    be Dataset in which case it returns the images for all datasets.
+    Retrieves all image from a list of IDs. If the IDs are Dataset IDs, then
+    returns all images objects from those datasets.
 
-    @rtype:  list of _ImageWrapper
-    @return: List of all images corresponding to the listed IDs.
+    Args:
+        conn: omero.gateway._BlitzGateway
+        ids: list of integers with the IDs to retrieve.
+        Data_Type: string with the data type that ids corresponds to. It can be
+            Image or Dataset.
+
+    Returns:
+        List of omero.gateway._ImageWrapper
     """
     objs = (conn.getObjects(Data_Type, ids))
     if Data_Type == "Image":
@@ -650,11 +698,11 @@ def get_images(conn, ids, Data_Type="Image"):
     return imgs
 
 def main(doc):
-    """Main entry point of the script, as called by the client via the
-    scripting service, passing the required parameters.
+    """Main entry point of the script.
 
-    @type  doc: string
-    @param doc: Help/Documentation to be displayed at start of plugin.
+    Args:
+        doc: a string with the help/documentation text that is displayed
+            at the start by the omero client.
     """
 
     ## FIXME it seems that we can't group related options together without
