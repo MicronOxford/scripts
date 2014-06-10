@@ -62,7 +62,7 @@ import omero.cli
 
 import numpy
 
-NDSAFIR  = distutils.spawn.find_executable("ndsafir_priism")
+NDSAFIR = distutils.spawn.find_executable("ndsafir_priism")
 
 def is_image2000(img):
     """Return true if image is a MRC image2000 file.
@@ -209,7 +209,7 @@ def any2imsubs(img):
             f.write(struct.pack("2i", ncols, nrows))  # width and height
             f.write(struct.pack("1i", nzsec * nchan * ntime)) # number of sections
 
-            pixelTypes = {
+            pixel_types = {
                 "int8"    : None,
                 "uint8"   : 0,
                 "int16"   : 1,
@@ -223,7 +223,7 @@ def any2imsubs(img):
                 "doublecomplex" : None,
             }
 
-            prc = pixelTypes[img.getPixelsType()] # image precision
+            prc = pixel_types[img.getPixelsType()] # image precision
             if prc is None:
                 raise TypeError("this image type cannot be converted to mrc")
 
@@ -247,7 +247,8 @@ def any2imsubs(img):
             f.write(struct.pack("3i", 1, 2, 3))     # maps axis to dimension.
 
             ## These values are supposed to be only for the first 2D image/plane
-            p = img.getPrimaryPixels().getPlane()
+            px = img.getPrimaryPixels()
+            p = px.getPlane()
             f.write(struct.pack("3f", p.min(), p.max(), p.mean()))
 
             f.write(struct.pack("2i", 0, 0))      # Space group number, and extended header size
@@ -261,7 +262,7 @@ def any2imsubs(img):
             ## Minimum and maximum intensity of each other channel. If there is
             ## a fifth channel, its data will be later on in the header file.
             for chan in xrange(1, min(4, nchan)):
-                p = img.getPrimaryPixels().getPlane(theC=chan)
+                p = px.getPlane(theC=chan)
                 f.write(struct.pack("2f", p.min(), p.max()))
             f.write(struct.pack("%if" % ((4 - nchan) *2), *[0]*((4 - nchan) *2)))
 
@@ -273,7 +274,7 @@ def any2imsubs(img):
                 f.write(struct.pack("2f", 0.0, 0.0))
             elif nchan == 5:
                 p = px.getPlane(theC=4)
-                f.write(struct.pack("2f", fr.min(), fr.max()))
+                f.write(struct.pack("2f", p.min(), p.max()))
             else:
                 raise TypeError("mrc file cannot have more than 5 channels")
 
@@ -304,7 +305,6 @@ def any2imsubs(img):
             f.write(struct.pack("i", 0))            # number of useful titles
             f.write(struct.pack("800s", " " * 800)) # space for 10 titles
 
-            px = img.getPrimaryPixels()
             for w in xrange(0, nchan):
                 for t in xrange(0, ntime):
                     for z in xrange(0, nzsec):
@@ -363,7 +363,6 @@ def export_image_file(client, fpath, dataset=None, name=None):
     Raises:
         Exception: if import failed for some reason or even if it was
             successful but we couldn't manage to deduce its ID.
-
     """
 
     cli = omero.cli.CLI()
@@ -404,9 +403,9 @@ def export_image_file(client, fpath, dataset=None, name=None):
                 cli.invoke(cmd)
         finally:
             sys.stderr = STDERR
-        retCode = cli.rv
+        ret_code = cli.rv
 
-        if retCode == 0:
+        if ret_code == 0:
             ## we only need to read one line or something is very wrong
             cid = int(stdout.readline())
             if not cid:
@@ -480,6 +479,7 @@ def adopt_child(parent, child):
         void
     """
     def append2description(img, relation, to):
+        """Append relationship text to an image description."""
         desc = img.getDescription()
         if desc and desc[-1] != "\n":
             desc += "\n"
@@ -513,7 +513,7 @@ def get_mrc_file(img):
     ##     files in which case they wouldn't be mrc files anyway.
     for f in img.getImportedImageFiles():
         if is_dv(f) or is_image2000(f) or is_imsubs(f) or is_mrc(f):
-            ext  = os.path.splitext(f.getName())[1]
+            ext = os.path.splitext(f.getName())[1]
             tmpf = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
             for c in f.getFileInChunks():
                 tmpf.write(c)
@@ -674,7 +674,7 @@ def get_ndsafir_args(params):
 
     return opts
 
-def get_images(conn, ids, Data_Type="Image"):
+def get_images(conn, ids, data_type="Image"):
     """Get all images from IDs, either image or dataset IDs.
 
     Retrieves all image from a list of IDs. If the IDs are Dataset IDs, then
@@ -683,14 +683,14 @@ def get_images(conn, ids, Data_Type="Image"):
     Args:
         conn: omero.gateway._BlitzGateway
         ids: list of integers with the IDs to retrieve.
-        Data_Type: string with the data type that ids corresponds to. It can be
+        data_type: string with the data type that ids corresponds to. It can be
             Image or Dataset.
 
     Returns:
         List of omero.gateway._ImageWrapper
     """
-    objs = (conn.getObjects(Data_Type, ids))
-    if Data_Type == "Image":
+    objs = (conn.getObjects(data_type, ids))
+    if data_type == "Image":
         imgs = objs
     else:
         ## flatten list from generators
@@ -795,7 +795,7 @@ def main(doc):
     try:
         params = client.getInputs(unwrap=True)
         conn = omero.gateway.BlitzGateway(client_obj=client)
-        imgs = get_images(conn, params["IDs"], Data_Type=params["Data_Type"])
+        imgs = get_images(conn, params["IDs"], data_type=params["Data_Type"])
 
         ## FIXME our version of nd-safir crashes if we don't use time
         params["time"] = True
