@@ -684,11 +684,12 @@ def main(doc):
         ## are image dependent, so we can't replicate them in the GUI
 
         ## Group 2.1 - ndsafir dimensionality
-        omero.scripts.Bool(
-            "time", optional=False, default=True,
-            description="Look for similarities over multiple time points",
-            grouping="03",
-        ),
+        ## FIXME our version of nd-safir crashes if we don't use time
+#        omero.scripts.Bool(
+#            "time", optional=False, default=True,
+#            description="Look for similarities over multiple time points",
+#            grouping="03",
+#        ),
         omero.scripts.Bool(
             "wavelength", optional=False, default=False,
             description="Look for similarities in multiple channels",
@@ -747,6 +748,9 @@ def main(doc):
         params = client.getInputs(unwrap=True)
         conn = omero.gateway.BlitzGateway(client_obj=client)
         imgs = get_images(conn, params["IDs"], Data_Type=params["Data_Type"])
+
+        ## FIXME our version of nd-safir crashes if we don't use time
+        params["time"] = True
 
         args = get_ndsafir_args(params)
         nbad = 0
