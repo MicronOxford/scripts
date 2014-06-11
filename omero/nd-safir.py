@@ -50,6 +50,7 @@ Machine Intelligence, IEEE Transactions on 29.6 (2007): 1096-1102.
 import tempfile     # consider replace this with omero.util.temp_files
 import sys          # because omero redirection of stderr is buggy
 import os
+import errno
 import os.path
 import subprocess
 import struct
@@ -63,6 +64,27 @@ import omero.cli
 import numpy
 
 NDSAFIR = distutils.spawn.find_executable("ndsafir_priism")
+
+def unlink_force(path):
+    """Remove file but ignore nonexistent files.
+
+    Using os.unlink() to remove a non-existing file throws an error. This
+    function just ignores it, kind of like "rm -f path".
+
+    Args:
+        path: filepath for the file to be removed.
+
+    Returns:
+        void
+
+    Raises:
+        Same as os.unlink() except the OSError due to non-existing file.
+    """
+    try:
+        os.unlink(path)
+    except OSError as e:
+        if e != errno.ENOENT: # No such file or directory
+            raise
 
 def is_image2000(img):
     """Return true if image is a MRC image2000 file.
@@ -555,28 +577,31 @@ def run_ndsafir(fin, args):
 
     fout = tempfile.NamedTemporaryFile(suffix=".mrc", delete=False).name
 
-    args = [NDSAFIR, fin, fout] + args
-
     log = tempfile.NamedTemporaryFile(suffix=".log", delete=False)
-    log.write("$%s\n" % " ".join(args))
-    log.flush()
-    try:
-        ## ndsafir is a bit weird about where it prints log. The actual
-        ## important stuff (the log) is being printed to stderr. Then, it
-        ## appears it has a bug which causes the sampling value to be printed
-        ## to stdout during the first iteration. This small bug means that
-        ## users would get a useless "info" file to download with "sampling=x"
-        ## so we redirect stdout to null.
-        with open(os.devnull, 'w') as null:
-            ret = subprocess.call(args, stderr=log, stdout=null)
-        if ret != 0:
-            raise Exception("trouble running ND-safir")
-    except OSError, e:
-        raise Exception("%s execution failed: %s" % (args[0], str(e)))
-    finally:
-        log.close()
-
     flog = log.name
+
+    args = [NDSAFIR, fin, fout] + args
+    try:
+        with log:
+            log.write("$ %s\n" % " ".join(args))
+            log.flush()
+
+            ## ndsafir is a bit weird about where it prints log. The actual
+            ## important stuff (the log) is being printed to stderr. Then, it
+            ## appears it has a bug which causes the sampling value to be printed
+            ## to stdout during the first iteration. This small bug means that
+            ## users would get a useless "info" file to download with "sampling=x"
+            ## so we redirect stdout to null.
+            with open(os.devnull, 'w') as null:
+                ret = subprocess.call(args, stderr=log, stdout=null)
+            if ret != 0:
+                raise Exception("trouble running ND-safir")
+
+    except Exception as e:
+        unlink_force(fout)
+        unlink_force(flog)
+        raise
+
     return fout, flog
 
 def get_ndsafir_args(params):
@@ -709,7 +734,7 @@ def main(doc):
     ##       having a parent and a parent requires some sort of an option.
     ##       See https://github.com/openmicroscopy/openmicroscopy/issues/2463
     client = omero.scripts.client(
-        "Denoise image with ND-SAFIR",
+        "Denoise image with NDSAFIR",
         doc,
 
         ## Group 1 - selection of objects
@@ -799,10 +824,10 @@ def main(doc):
 
         ## FIXME our version of nd-safir crashes if we don't use time
         params["time"] = True
-
         args = get_ndsafir_args(params)
+
         nbad = 0
-        nimgs = 0 # imgs is a generator so we can't use len(imgs)
+        nimgs = 0 # imgs might be a generator so we can't use len(imgs)
         for parent in imgs:
             nimgs += 1
             try:
@@ -833,10 +858,7 @@ def main(doc):
                 nbad += 1
             finally:
                 for f in [fin, fout, flog]:
-                    try:
-                        os.unlink(f)
-                    except OSError:
-                        pass
+                    unlink_force(f)
 
         if nimgs == 0:
             msg = "No images selected"
