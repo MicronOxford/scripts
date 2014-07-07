@@ -25,6 +25,7 @@ after removing them.
 import sys
 import Bio.SeqIO
 import Tkinter
+import tkFileDialog
 
 ## Array of features that we will bother with. Any feature key not listed
 ## here will be removed right from start and not even displayed.
@@ -76,9 +77,12 @@ def select_seq_feats(seq):
     return frame.get_selected()
 
 if __name__ == '__main__':
-    ## TODO we should handle other options, warn about extra arguments
-    ##      Basically, use getopts or something like that
-    filename = sys.argv[1]
+    if (len(sys.argv) > 1):
+        filename = sys.argv[1]
+    else:
+        filename = tkFileDialog.askopenfilename(
+            filetypes=[('Genbank files', '.gb'), ('All files', '*')]
+        )
     try:
         with open(filename) as f:
             ## for now, we know that there is only one sequence per file so
