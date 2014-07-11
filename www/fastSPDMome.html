@@ -1,0 +1,87 @@
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en-US" xml:lang="en-US">
+  <head>
+    <title>fastSPDMome web interface</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  </head>
+
+<!--
+  Copyright notice comes after <head> because encoding declaration needs to
+  be in the first 1024 bytes of the file.
+
+  Copyright (C) 2014 David Pinto <david.pinto@bioch.ox.ac.uk>
+
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation; either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  GNU Affero General Public License for more details.
+
+  You should have received a copy of the GNU Affero General Public License
+  along with this program; if not, see <http://www.gnu.org/licenses/>.
+-->
+
+  <body style="text-align:center;background-color:#353535;color:#CCCCCC">
+
+    <h1>fastSPDMome web interface</h1>
+
+    <form action="/cgi-bin/fastSPDMome.pl" method="post"
+          enctype="multipart/form-data">
+      <table style="display: inline-table; text-align:left;">
+        <tr>
+          <td>Tiff file</td>
+          <td><input type="file" name="data"/></td>
+        </tr>
+        <tr>
+          <td>Gain correction</td>
+          <td><input type="text" name="gc" value="65"/></td>
+        </tr>
+        <tr>
+          <td>Pixel size</td>
+          <td><input type="text" name="px" value="20"/></td>
+        </tr>
+        <tr>
+          <td>Filter long-lasting fluorescence</td>
+          <td><input type="checkbox" name="filter1" value="true"/></td>
+        </tr>
+        <tr>
+          <td>Filter fluorophore blinking</td>
+          <td><input type="checkbox" name="filter2" value="true"/></td>
+        </tr>
+        <tr style="display:none">
+          <td>Plot distances</td>
+          <td><input type="checkbox" name="plotd"/></td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>
+            <!--
+              We remove the button after click to avoid multiple submissions.
+              We should also consider replacing the whole form with some image
+              displaying progress. A circling white dot or something like that.
+            -->
+            <input type="submit" value="Perform localization"
+                   onclick="this.style.visibility = 'hidden';"/>
+          </td>
+        </tr>
+      </table>
+    </form>
+
+    <h1>Documentation</h1>
+    <p>
+      Please see
+        <a href="http://micronwiki.bioch.ox.ac.uk/wiki/Localization_Microscopy">
+          the Micron wiki
+        </a>
+      for details on each option.
+    </p>
+
+  </body>
+</html>
+
