@@ -27,7 +27,17 @@
   along with this program; if not, see <http://www.gnu.org/licenses/>.
 -->
 
-  <body style="text-align:center;background-color:#353535;color:#CCCCCC">
+  <script type="text/javascript">
+    // The submit button is hidden after click to avoid multiple requests
+    // by anxious users. However, web browsers will cache its hidden status
+    // so we must make it visible again when page is show.
+    function show_submit_button() {
+      document.getElementById("submit").style.visibility = 'visible';
+    }
+  </script>
+
+  <body style="text-align:center;background-color:#353535;color:#CCCCCC"
+        onpageshow="show_submit_button();">
 
     <h1>fastSPDMome web interface</h1>
 
@@ -66,7 +76,7 @@
               We should also consider replacing the whole form with some image
               displaying progress. A circling white dot or something like that.
             -->
-            <input type="submit" value="Perform localization"
+            <input type="submit" id="submit" value="Perform localization"
                    onclick="this.style.visibility = 'hidden';"/>
           </td>
         </tr>
