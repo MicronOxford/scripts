@@ -60,6 +60,7 @@ my $tmp_root = "/tmp";
 
 ## On the file system
 my $tmp_dir = File::Temp::tempdir(
+  POSIX::strftime("%Y%m%d", localtime()) . "-XXXX",
   DIR => File::Spec->catfile($tmp_root, $tmp_webroot),
 );
 ## On the webserver
