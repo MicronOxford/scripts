@@ -30,6 +30,7 @@ use strict;
 use warnings;
 use POSIX ();     # for &WNOHANG XXX consider replacing with IPC::Run
 use IPC::Open2;   # XXX consider replacing with IPC::Run
+use File::Copy;
 use File::Temp;
 use File::Spec;
 use File::Basename;
@@ -43,31 +44,33 @@ use CGI; # XXX consider replacing with Dancer or Mojolicious::Lite
 $ENV{PATH} = join(":", qw(/bin /usr/bin));
 
 ##
-## Temporary file configuration
+## Temporary and pseudo persistent file configuration
 ##
 
 ## The script will create temporary directories (one for each input image),
-## inside a general directory to which the web server user (www-data in Debian)
-## has write permissions. This script can remove the original data (the large
-## files), but not the generated images so they are available for download.
-## These generated images are very small but after some time... better have a
-## cron job that removes old files from there frequently.
+## where it keeps all files during the computation. These are cleaned up in
+## the end. The files actually served for the web, will be moved out into
+## a separate, persistent directory. These files are much smaller (less
+## than 1MB), but may accumulate over time.
 
-## In the filesystem, all files will be in $tmp_root/$tmp_webroot/tempname/
-## For the webserver, they will be in /$tmp_webroot/tempname/
-my $tmp_webroot = "fastSPDMome";
-my $tmp_root = "/tmp";
+my $webroot = "fastSPDMome"; # root of all this as viewed from the web
+my $srv_root = "/var/lib/"; # directory where $webroot will exist
 
-## On the file system
-my $tmp_dir = File::Temp::tempdir(
+## Where on the filesystem, all temporary files reside. Automatically
+## removed at the end.
+my $tmp_dir = File::Temp::newdir(
   POSIX::strftime("%Y%m%d", localtime()) . "-XXXX",
-  DIR => File::Spec->catfile($tmp_root, $tmp_webroot),
 );
-## On the webserver
-my $tmp_webdir = File::Spec->catfile(
-  $tmp_webroot,
-  (File::Spec->splitdir ($tmp_dir))[-1]
+
+## The absolute path, from the POV of the filesystem, of what will be served
+## by Apache for this run. Not removed in the end.
+my $srv_run = File::Temp::tempdir(
+  POSIX::strftime("%Y%m%d", localtime()) . "-XXXX",
+  DIR => File::Spec->catfile($srv_root, $webroot)
 );
+
+## The directory for this run, POV of the web "$webroot/YYYMMDD-XXXX"
+my $web_run = File::Spec->catfile((File::Spec->splitdir($srv_run))[-2, -1]);
 
 ##
 ## CGI configuration
@@ -83,7 +86,7 @@ Please contact David Pinto from Micron via phone on extension 13359 or
 mail <a href="mailto:david.pinto\@bioch.ox.ac.uk">david.pinto\@bioch.ox.ac.uk</a>.
 </p>
 <p>
-Please keep this error message and the value '$tmp_webdir' for reference.
+Please keep this error message and the value '$web_run' for reference.
 </p>
 END
 $CGI::POST_MAX = 1024 * 1000 * 200; # max 200MB file uploads
@@ -273,6 +276,12 @@ sub get_output_files {
     ## Get file name with the key closer to the end of the filename
     my %rind = map {$_ => rindex ($_, $key)} @fnames;
     $files{$key} = (sort {$rind{$b} <=> $rind{$a}} @fnames)[0];
+    ## TODO the file names come untainted from readdir but we can't really
+    ##      untaint them. Since only the web browser should be writing to this
+    ##      dir, and since it is created and removed at the start and end of the
+    ##      script, it should be safe to untaint it this way.
+    $files{$key} =~ m/(.*)/;
+    $files{$key} = $1;
   }
   return %files;
 }
@@ -283,6 +292,18 @@ my %output = get_output_files();
 ##
 ## Create HTML to display results
 ##
+sub save_file {
+  ## Will move files from the temporary directory, to a more persistent
+  ## place, so it can be served by the web browser. This is usually the
+  ## equivalent of moving from /tmp/xx to /var/lib/app/xx
+  my $fname  = shift;
+  my $source = File::Spec->catfile($tmp_dir, $fname);
+  my $dest   = File::Spec->catfile($srv_run, $fname);
+  ## We do not die if it fails, as we might still have other things to salvage.
+  $dest = undef unless File::Copy::move($source, $dest);
+  my $dest_web  = File::Spec->catfile("/", $web_run, $fname);
+  return ($dest, $dest_web);
+}
 
 sub slurp_log {
   ## This either returns the whole log (small file) in a single string,
@@ -298,10 +319,8 @@ sub slurp_log {
 sub get_display {
   ## Not all browsers will be able to display the tiff generated, we need
   ## to convert it into something else such as jpg or png.
-  my $tiff_name = shift;
-  my $tiff_path = File::Spec->catfile($tmp_dir, $tiff_name);
-  my $tiff_web  = File::Spec->catfile("/", $tmp_webdir, $tiff_name);
-  my $jpeg_name = $tiff_name . ".jpg";
+  my $tiff_path = shift;
+  my $tiff_web  = shift;
   my $jpeg_path = $tiff_path . ".jpg";
   my $jpeg_web  = $tiff_web  . ".jpg";
 
@@ -321,12 +340,15 @@ sub center_pre {
   ));
 }
 
+## The reconstructed image. That's the main thing we care about.
+my ($imstres_path, $imstres_webpath) = save_file($output{'imstres'});
+
 print $cgi->header();
 print $cgi->start_html(-title => 'localized', -BGCOLOR => "#353535");
 
 print $cgi->div({-style=>"text-align:center;color:#CCCCCC"},
   center_pre(slurp_log (File::Spec->catfile($tmp_dir, $output{'log'}))),
-  get_display($output{'imstres'}),
+  get_display($imstres_path, $imstres_webpath),
   center_pre($code),
 );
 
