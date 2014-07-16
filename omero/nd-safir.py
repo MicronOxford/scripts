@@ -246,6 +246,8 @@ def any2imsubs(img):
             }
 
             prc = pixel_types[img.getPixelsType()] # image precision
+            ## Note that uint8 has a value of zero which evaluates as false.
+            ## Because of that, we use "is None" instead of "not prc"
             if prc is None:
                 raise TypeError("this image type cannot be converted to mrc")
 
@@ -316,7 +318,10 @@ def any2imsubs(img):
                 else:
                     f.write(struct.pack("1h", 0))
             if rchan != nchan:
-                ## fix the information
+                ## Fix the information if the numbers don't match. Go back to
+                ## the start of this section, write the correct number of
+                ## channels, then jump to the last one, and fill the rest with
+                ## zeros.
                 f.seek(- struct.calcsize("%ih" % (rchan+1)), 1)
                 f.write(struct.pack("1h", rchan))
                 f.seek(struct.calcsize("%ih" % rchan), 1)
