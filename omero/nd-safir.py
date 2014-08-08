@@ -55,6 +55,7 @@ import os.path
 import subprocess
 import struct
 import distutils.spawn
+import time
 
 import omero.scripts
 import omero.gateway
@@ -345,7 +346,6 @@ def any2imsubs(img):
         except Exception as e:
             f.close()
             os.unlink(f.name)
-            print str(e)
             raise
 
     return f.name
@@ -554,7 +554,7 @@ def get_mrc_file(img):
     return path
 
 
-def run_ndsafir(fin, args):
+def run_ndsafir(fin, args, conn, timeout = lambda : False, time_grain = 10):
     """Run ndsafir program on the image.
 
     Args:
@@ -563,14 +563,24 @@ def run_ndsafir(fin, args):
             input.
         args: a list with all the input arguments to pass to the ndsafir
             application.
+        conn: omero.gateway._BlitzGateway required to keep the connection
+            alive for long processes.
+        timeout: an anonymous function that checks if the process should
+            timeout (which will raise an exception). Use `lambda : False`
+            to never timeout, or `lambda : time.time() > X` where X is
+            `time.time() + 60*60*2` to timeout after 2 hours.
+        time_grain: interval, in seconds, to check the child process status
+            and send Omero server a keep alive token. This should never be
+            higher than Omero's server timeout (which defaults 10 minutes).
+            See Omero's omero.sessions.timeout
 
     Returns:
         A tuple with the filepath for the processed image on the first element,
             and for the processing log file on the second.
 
     Raises:
-        Exception: if unable to find the ndsafir application in the system
-            or the execution failed for some reason.
+        Exception: if unable to find the ndsafir application in the system,
+            the process failed for some reason, or timeout was reached.
     """
     ## For whatever reason, the ndsafir version we got seems to only work with
     ## MRC files. When a TIFF file is used, it just hangs forever and takes up
@@ -597,10 +607,19 @@ def run_ndsafir(fin, args):
             ## to stdout during the first iteration. This small bug means that
             ## users would get a useless "info" file to download with "sampling=x"
             ## so we redirect stdout to null.
-            with open(os.devnull, 'w') as null:
-                ret = subprocess.call(args, stderr=log, stdout=null)
-            if ret != 0:
-                raise Exception("trouble running ND-safir")
+            with open(os.devnull, "w") as null:
+                p = subprocess.Popen(args, stderr=log, stdout=null)
+                def running():
+                    return p.poll() is None
+                while not timeout() and running():
+                    conn.keepAlive()
+                    time.sleep(time_grain)
+
+                if not running() and p.returncode != 0:
+                    raise Exception("trouble running ND-safir")
+                elif timeout():
+                    p.terminate()
+                    raise Exception("NDsafir exceedeed time allowed")
 
     except Exception as e:
         unlink_force(fout)
@@ -839,7 +858,7 @@ def main(doc):
                 fin = fout = flog = "" # so its defined to unlink later
                 basename = os.path.splitext(parent.getName())[0] + "_DN"
                 fin = get_mrc_file(parent)
-                fout, flog = run_ndsafir(fin, args)
+                fout, flog = run_ndsafir(fin, args, conn)
                 child = export_image_file(
                     client,
                     fout,
