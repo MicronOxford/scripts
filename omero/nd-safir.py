@@ -84,7 +84,7 @@ def unlink_force(path):
     try:
         os.unlink(path)
     except OSError as e:
-        if e != errno.ENOENT: # No such file or directory
+        if e.errno != errno.ENOENT: # No such file or directory
             raise
 
 def is_image2000(img):
