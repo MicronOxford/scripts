@@ -401,8 +401,24 @@ def export_image_file(client, fpath, dataset=None, name=None):
 
     cli = omero.cli.CLI()
     cli.loadplugins()
+
+    ## Parse the hostname from the router information (which will be a string
+    ## like 'OMERO.Glacier2/router -t -e 1.0:tcp -h 129.67.77.159 -p 4063').
+    ## While at the moment most people have OMERO and the processor on the
+    ## same system, this is not true for us or anyone else that in the future
+    ## may start using OMERO.grid.
+    hostname = "localhost"
+    router = str(client.getRouter(client.getCommunicator())).split(" ")
+    is_h = False
+    for arg in router:
+        if is_h:
+            hostname = arg
+            break
+        elif arg == "-h":
+            is_h = True
+
     cmd = [
-        "-s", "localhost",
+        "-s", hostname,
         "-k", client.getSessionId(),
         "import",
         "--debug", "ERROR",
