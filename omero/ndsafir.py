@@ -54,7 +54,6 @@ import errno
 import os.path
 import subprocess
 import struct
-import distutils.spawn
 import time
 
 import omero.scripts
@@ -64,7 +63,16 @@ import omero.cli
 
 import numpy
 
-NDSAFIR = distutils.spawn.find_executable("ndsafir_priism")
+## There's two reasons we are using the absolute path:
+##    1) security - we should not be trusting PATH since someone could be
+##       adding an alternative command there, and indeed that's what happens
+##       when using perl's tainted mode (but in the complex system that is
+##       omero that's likely a moot point)
+##    2) ndsafir binary is not available on the system PATH, it is set up
+##       via a profile script which is only executed when starting a login
+##       shell. Even if it was available, we should then be using
+##       distutils.spawn.find_executable.
+NDSAFIR = "/usr/local/priism/bin/ndsafir_priism"
 
 def unlink_force(path):
     """Remove file but ignore nonexistent files.
@@ -226,7 +234,6 @@ def any2imsubs(img):
     nzsec = img.getSizeZ()
     nchan = img.getSizeC()
     ntime = img.getSizeT()
-
     with tempfile.NamedTemporaryFile("wb", suffix=".mrc", delete=False) as f:
         try:
             f.write(struct.pack("2i", ncols, nrows))  # width and height
@@ -586,6 +593,7 @@ def run_ndsafir(fin, args, conn, timeout = lambda : False, time_grain = 10):
     ## MRC files. When a TIFF file is used, it just hangs forever and takes up
     ## all CPU. Apparently, the version Sussex got works fine with TIFFs but is
     ## not multi-thread. Could it be an issue with my build?
+
 
     if not NDSAFIR:
         raise Exception("Unable to find ndsafir_priism in the system")
