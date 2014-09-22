@@ -185,9 +185,8 @@ my $filter2         = untaint_bool  ('filter2'); # correction for blinking fluor
 my $code = <<END;
 status = 0;
 try
-  rmpath ('/usr/local/MATLAB/R2010b/locmic/fastSPDM');
-  rmpath ('/usr/local/MATLAB/R2010b/locmic/ox');
-  rmpath ('/usr/local/MATLAB/R2010b/locmic');
+  addpath ('/usr/local/lib/MATLAB/site-toolboxes/dipimage/dipimage');
+  dip_initialise ('silent');
   addpath ('$fastSPDMome_path');
   fastSPDMome ('$image_path', $gain_correction, $filter1, $filter2, $pixel_size, $plot_distance);
 catch err
