@@ -32,12 +32,27 @@ class dv_utils():
   time allows.
   """
 
-  @staticmethod
-  def is_image2000(img):
-    """Return true if image is a MRC image2000 file.
+  def __init__(self, img):
+    self.img = img
+    self.maybe_mrc = True
+    ## Read in the basic header. If it doesn't even have it, it
+    ## is definitely not a MRC based image file
+    self.header = self.img.getFileInChunks(buf = 1024).next()
+    if len(self.header) < 1024:
+      self.maybe_mrc = False
 
-    Args:
-      img: omero.gateway._OriginalFileWrapper
+  def if_maybe_mrc(func):
+    """Decorator for is_dvtype type of functions."""
+    def wrapper(self):
+        if self.maybe_mrc:
+          return func(self)
+        else:
+          return False
+    return wrapper
+
+  @if_maybe_mrc
+  def is_image2000(self):
+    """Return true if image is a MRC image2000 file.
 
     Returns:
       A boolean value. True if img is an mrc image 2000 file,
@@ -45,17 +60,16 @@ class dv_utils():
     """
     ##  * Original MRC image2000 specs:
     ##      http://www2.mrc-lmb.cam.ac.uk/image2000.html
-    s = img.getFileInChunks(buf=53*4).next()
 
     ## New versions of the MRC format are supposed to have this signature
     ## but I'm still unsure if Priism is capable of reading them...
-    if len(s) >= 53*4 and s[52*4:53*4] == "MAP ":
+    if self.header[52*4:53*4] == "MAP ":
       return True
     else:
       return False
 
-  @staticmethod
-  def is_mrc(img):
+  @if_maybe_mrc
+  def is_mrc(self):
     """Return true if image is an mrc (original) image file.
 
     There seems to be multiple variants of the MRC format. The
@@ -68,9 +82,6 @@ class dv_utils():
     header, we can only check if the file extension is mrc and
     hope for the best.
 
-    Args:
-      img: omero.gateway._OriginalFileWrapper
-
     Returns:
       A boolean value. True if img is an mrc file, False
       otherwise.
@@ -81,38 +92,30 @@ class dv_utils():
     ##  * Priism take on the subject:
     ##      http://msg.ucsf.edu/IVE/IVE4_HTML/mrc2image2000.html
     ## old versions will need to check with file extension
-    ext = os.path.splitext(img.getName())[1]
+    ext = os.path.splitext(self.img.getName())[1]
     if ext.lower() == ".mrc":
       return True
     else:
       return False
 
-  @staticmethod
-  def is_dv(img):
+  @if_maybe_mrc
+  def is_dv(self):
     """Return true if image has a dv image file.
-
-    Args:
-      img: omero.gateway._OriginalFileWrapper
 
     Returns:
       A boolean value. True if img is a dv file, False otherwise.
     """
     ## According to bioformats's DeltavisionReader.java (which is GPL), a
     ## DV file must read 0xa0c0 or 0xc0a0 at pos 96.
-    rv = False
-    s = img.getFileInChunks(buf=98).next()
-    if len(s) >= 98:
-      m = struct.unpack("H", s[96:98])[0]
-      if m == 49312 or m == 41152:
-        rv = True
-    return rv
+    m = struct.unpack("H", self.header[96:98])[0]
+    if m == 49312 or m == 41152:
+      return True
+    else:
+      return False
 
-  @staticmethod
-  def is_imsubs(img):
+  @if_maybe_mrc
+  def is_imsubs(self):
     """Return true if image is a MRC IMSubs.
-
-    Args:
-      img: omero.gateway._OriginalFileWrapper
 
     Returns:
       A boolean value. True if img is an MRC IMSubs file,
@@ -120,14 +123,11 @@ class dv_utils():
     """
     ##  * Format specs from IVE:
     ##      http://www.msg.ucsf.edu/IVE/IVE4_HTML/IM_ref2.html
-    rv = False
-
-    s = img.getFileInChunks(buf=98).next()
-    if len(s) >= 98:
-      m = struct.unpack("H", s[96:98])[0]
-      if m == -16224:
-        rv = True
-    return rv
+    m = struct.unpack("H", self.header[96:98])[0]
+    if m == -16224:
+      return True
+    else:
+      return False
 
   @staticmethod
   def is_tiff(img):
@@ -445,8 +445,8 @@ class ndsafir(omero_scripts_processing.bin_block):
     ## Hopefully it is for cases when a ND image comes from multiple
     ## files in which case they wouldn't be mrc files anyway.
     for f in self.parent.getImportedImageFiles():
-      if (dv_utils.is_dv(f) or dv_utils.is_image2000(f)
-          or dv_utils.is_imsubs(f)):
+      fdv = dv_utils(f)
+      if fdv.is_dv() or fdv.is_image2000() or fdv.is_imsubs():
         ext = os.path.splitext(f.getName())[1]
         self.fin = self.get_tmp_file(suffix = ext)
         for c in f.getFileInChunks():
