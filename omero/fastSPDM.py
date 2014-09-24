@@ -50,8 +50,8 @@ class fastSPDM(omero_scripts_processing.matlab_block):
 
   schema = voluptuous.Schema(
     {
-      "gc"      : voluptuous.All(int, voluptuous.Range(min = 0)),
-      "pxsz"    : voluptuous.All(int, voluptuous.Range(min = 1)),
+      "gc"      : voluptuous.All(long, voluptuous.Range(min = 0)),
+      "pxsz"    : voluptuous.All(long, voluptuous.Range(min = 1)),
       "mfcorr"  : bool,
       "nfcorr"  : bool,
     },
@@ -98,10 +98,10 @@ class fastSPDM(omero_scripts_processing.matlab_block):
     """Validate list of parameters.
 
     Raises:
-        omero_ext.processing.invalid_parameter
+        omero_scrits_processing.invalid_parameter
     """
     try:
-      self.options = schema(self.options)
+      self.options = self.schema(self.options)
     except voluptuous.Invalid as e:
       raise omero_scripts_processing.invalid_parameter(str(e))
 
@@ -111,9 +111,9 @@ class fastSPDM(omero_scripts_processing.matlab_block):
     self.code = (
       "addpath ('/usr/local/lib/MATLAB/site-toolboxes/dipimage/dipimage');\n"
       "dip_initialise ('silent');\n"
-      "addpath (/home/carandraug/dstorm-tst/locmic/');\n"
+      "addpath ('/home/carandraug/dstorm-tst/locmic/');\n"
       "fastSPDMome ('%s', %i, %s, %s, %i, %s);\n"
-    ) % (self.fin, self.options['gc'],
+    ) % (self.fin.name, self.options['gc'],
          self.bool_py2m(self.options['mfcorr']),
          self.bool_py2m(self.options['nfcorr']),
          self.options['pxsz'], self.bool_py2m(False))
@@ -126,14 +126,14 @@ class fastSPDM(omero_scripts_processing.matlab_block):
 
   def send_child(self):
     child_sufix = "_imstres_pz_%i.tif" % self.options["pxsz"]
-    fout_name = os.path.splitext(self.fin.name())[0] + child_sufix
+    fout_name = os.path.splitext(self.fin.name)[0] + child_sufix
     ## FIXME we should not have to actually open a file
     self.fout = open(fout_name, "r")
 
     self.basename = os.path.splitext(self.parent.getName())[0]
-    self.child_name = self.basename + "_DN.mrc"
+    self.child_name = self.basename + child_sufix
 
-    super(ndsafir, self).send_child()
+    super(fastSPDM, self).send_child()
 
     ## Because this was not created as temporary file...
     self.fout.close()
@@ -144,6 +144,6 @@ class fastSPDM(omero_scripts_processing.matlab_block):
         raise
 
 if __name__ == "__main__":
-  chain = omero_ext.processing.chain([fastSPDM()])
+  chain = omero_scripts_processing.chain([fastSPDM()])
   chain.launch()
 
