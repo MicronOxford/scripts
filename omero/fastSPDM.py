@@ -59,7 +59,7 @@ class fastSPDM(omero_scripts_processing.matlab_block):
   )
 
   interpreter = "/usr/local/MATLAB/R2010b/bin/matlab"
-  interpreter_options = ["-nodisplay", "-nosplash", "-nojvm"]
+  interpreter_options = ["-nodisplay", "-nosplash"]
 
   def __init__(self):
     super(fastSPDM, self).__init__()
