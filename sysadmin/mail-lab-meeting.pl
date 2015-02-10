@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-## Copyright (C) 2014 David Pinto <david.pinto@bioch.ox.ac.uk>
+## Copyright (C) 2014, 2015 David Pinto <david.pinto@bioch.ox.ac.uk>
 ##
 ## This program is free software; you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -41,18 +41,24 @@
 use strict;
 use warnings;
 
+use Tie::RefHash;
+
 use Email::Sender::Simple qw(sendmail); # send mail
 use Email::Simple;                      # create mail
 use Email::Valid;                       # confirm it's not gibberish
 use LWP::Simple;                        # get wiki page
 use DateTime;                           # date comparisons
 
-my $from  = 'Eva Wegel <eva.wegel@bioch.ox.ac.uk>';
+my $from  = 'Ian Dobbie <ian.dobbie@bioch.ox.ac.uk>';
 my $wiki  = 'http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings';
 
-my @tos;      # list of valid emails to deliver the message
-my $speaker = undef; # undef so we can later decide when send email about no meeting
-my $tomorrow = DateTime->today->add (days => 1);
+my @tos;      # valid emails to deliver the message
+
+## we are assuming that there is at most, one talk per day
+my %talks;    # all talks listed.  We do search only for the next because we
+              # also want to find the talk after (and we don't know if we will
+              # read them sorted
+tie %talks, 'Tie::RefHash';
 
 ## We could use one of the mediawiki modules but our needs are really
 ## simple and would complicate installation on the server side.
@@ -73,17 +79,10 @@ foreach my $line (split /^/, $source) {
   ## Skip non bullet lists
   next unless $line =~ s/^\*\s*//;
 
-  if ($section eq "speakers" && ! $speaker) {
+  if ($section eq "speakers") {
     ## line must be "YYYY/MM/DD - SPEAKER" (whitespace is ignored)
     $line =~ m/(\d{4})\/(\d{2})\/(\d{2})\s*-?\s*(.*)/; # "-?" to support no talks
-    my $dt = DateTime->new(
-      year  => $1,
-      month => $2,
-      day   => $3,
-    );
-    ## We will only care about tomorrows lab meeting
-    next unless $dt == $tomorrow;
-    $speaker = $4;
+    $talks{DateTime->new(year => $1, month => $2, day => $3)} = $4;
 
   } elsif ($section eq "subscriptions") {
     ## line should be a ready to go email address
@@ -92,44 +91,55 @@ foreach my $line (split /^/, $source) {
   }
 }
 
-my $body;
+my $next_date = undef;
+my $following_date = undef;
+my $tomorrow = DateTime->today->add (days => 1);
+for my $date (sort keys %talks) {
+  if ($date == $tomorrow) {
+    $next_date = $date;
+  } elsif ($next_date) {
+    $following_date = $date;
+    last;
+  }
+}
+
+exit () if (! defined $next_date);
+
 my $subject;
 
-if (! defined $speaker) {
-  exit ();
-
-} elsif ($speaker eq "") {
-  $subject = "No Micron-NanO lab meeting tomorrow";
-  $body = <<EOF;
-Dear all,
-
-just to remind you that there will be no lab meeting tomorrow.
-
-The list of speakers can be found here:
-
-http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings
-
-Best regards,
-Eva
-EOF
-
-} else {
+my $next_talk_body;
+if ($talks{$next_date}) {
   $subject = "Micron-NanO lab meeting tomorrow at 2 pm";
-  $body = <<EOF;
+  $next_talk_body = <<EOF;
+We will meet tomorrow at 2 pm in the 1st floor seminar room in Biochemistry.
+The speaker will be $talks{$next_date}.
+EOF
+} else {
+  $subject = "No Micron-NanO lab meeting tomorrow";
+  $next_talk_body = <<EOF;
+This is to remind you that there will be no lab meeting tomorrow.
+EOF
+}
+
+my $following_talk_body = "";
+if ($talks{$following_date}) {
+  $following_talk_body = <<EOF;
+The speaker for the following meeting will be $talks{$following_date}.
+EOF
+}
+
+my $body = <<EOF;
 Dear all,
 
-we will meet tomorrow at 2 pm in the 1st floor seminar room in Biochemistry.
-The speaker will be $speaker.
-
-The list of speakers can be found here:
-
-http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings
+$next_talk_body
+$following_talk_body
+As always, the list of speakers can be found on our wiki [1].
 
 Best regards,
-Eva
-EOF
+Micron
 
-}
+[1] http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings
+EOF
 
 my $email = Email::Simple->create (
   header => [
