@@ -1,0 +1,16 @@
+Problem
+=======
+
+Fiji updater obviously requires write-permission.  This does not plays well
+with a multi-user system where one install is to be shared between all the
+users.  Removing write permissions means that the updater throws warnings
+at the users and that is scary for them.
+
+Solution
+========
+
+Drop the jar file created into the Fiji jars directory to disable the
+auto-updater.  Run `mvn package` to get the jar file.  kudos to ctrueden.
+
+See [imagej-updater issue #7](https://github.com/imagej/imagej-updater/issues/7)
+for details.

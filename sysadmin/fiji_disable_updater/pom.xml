@@ -1,0 +1,42 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                      http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <properties>
+    <project.build.sourceEncoding>utf-8</project.build.sourceEncoding>
+  </properties>
+
+  <groupId>uk.ac.ox.micron</groupId>
+  <artifactId>fiji_disable_updater</artifactId>
+  <version>0.0.1</version>
+  <packaging>jar</packaging>
+
+  <dependencies>
+    <dependency>
+      <groupId>net.imagej</groupId>
+      <artifactId>ij</artifactId>
+      <version>RELEASE</version>
+    </dependency>
+    <dependency>
+      <groupId>org.scijava</groupId>
+      <artifactId>scijava-common</artifactId>
+      <version>RELEASE</version>
+    </dependency>
+  <dependency>
+    <groupId>net.imagej</groupId>
+    <artifactId>imagej-updater</artifactId>
+    <version>RELEASE</version>
+  </dependency>
+  </dependencies>
+
+  <repositories>
+    <!-- Where maven can go look and download our build dependencies. -->
+    <repository>
+      <id>imagej.public</id>
+      <url>http://maven.imagej.net/content/groups/public</url>
+    </repository>
+  </repositories>
+
+</project>
