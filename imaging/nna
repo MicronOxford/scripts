@@ -17,9 +17,8 @@
 
 pkg load image;
 pkg load statistics;
-pkg load bioformats;
+pkg load imagej;
 
-javaMethod ("enableLogging", "loci.common.DebugTools", "ERROR");
 page_output_immediately (1);
 more ("off");
 
@@ -143,23 +142,62 @@ for fidx = 1:nFiles
   csv2_fpath = fullfile (fdir, [fname "-data_2.csv"]);
   plot_fpath = fullfile (fdir, [fname "-boxplot.pdf"]);
 
-  reader = bfGetReader (fpath);
-  if (reader.getSizeC () != 3)
-    warning ("file `%s' does not have 3 channels. Skipping...", fpath);
-    continue;
-  elseif (reader.getSizeT () != 1)
-    warning ("file `%s' is a time-series. Skipping...", fpath);
-    continue;
-  elseif (reader.getSizeZ () == 1)
-    warning ("file `%s' is not a Z stack. Skipping...", fpath);
-    continue;
-  endif
-  order = reader.getDimensionOrder ();
+  ## We are using java objects, we need to do garbage collection ourselves.
+  unwind_protect
+    imp = javaObject ("ij.ImagePlus", make_absolute_filename (fpath));
+    cim = javaObject ("ij.CompositeImage", imp);
+    if (imp.getNChannels () != 3)
+      warning ("`%s' does not have 3 channels. Skipping...", fpath);
+      continue;
+    elseif (imp.getNFrames () != 1)
+      warning ("`%s' is a time-series. Skipping...", fpath);
+      continue;
+    elseif (imp.getNSlices () == 1)
+      warning ("`%s' is not a Z stack. Skipping...", fpath);
+      continue;
+    endif
+
+    channels = cell (1, 3);
+    for i_c = 1:3
+      lut = cim.getChannelLut (i_c);
+      ## FIXME ideally, we would not have to use regular expressions to get
+      ##       the color name from the lut string representation.  However,
+      ##       getting color values from the LUT seems to fail randomly.
+      channels{i_c} = nthargout (5, @regexp, lut.toString (),
+                                             'rgb\[255\]=(\w+),', 'once'){1};
+#      color = javaObject ("java.awt.Color", lut.getRed (255),
+#                                            lut.getGreen (255),
+#                                            lut.getBlue (255));
+#      channels{i_c} = javaMethod ("colorToString", "ij.plugin.Colors", color);
+    endfor
+
+    blue_channel = find (strcmpi ("blue", channels));
+    if (numel (blue_channel) > 1)
+      warning ("multiple blue channels (DAPI) found for `%s'. Skipping...",
+               fpath);
+    elseif (isempty (blue_channel))
+      warning ("no blue channel (DAPI) found for `%s'. Skipping...", fpath);
+    endif
+    foci_channels = setdiff ([1 2 3], blue_channel);
+
+    cal = imp.getCalibration ();
+    voxel_sizes = [cal.pixelHeight cal.pixelWidth cal.pixelDepth];
+    if (strcmpi (cal.getUnit (), "micron"))
+      voxel_sizes *= 1000;
+    else
+      warning ("unknown voxel unit `%s' for `%s'. Skipping...",
+                cal.getUnit (), fpath);
+      continue
+    endif
+  unwind_protect_cleanup
+    clear imp;
+    [~] = javamem ();
+  end_unwind_protect
 
   im    = imread (fpath, "Index", "all");
-  dapi  = im(:,:,:,1:3:end);
-  chan1 = im(:,:,:,2:3:end);
-  chan2 = im(:,:,:,3:3:end);
+  dapi  = im(:,:,:,blue_channel:3:end);
+  chan1 = im(:,:,:,foci_channels(1):3:end);
+  chan2 = im(:,:,:,foci_channels(2):3:end);
 
   dapi_mask = get_dapi_mask (dapi);
 
@@ -180,8 +218,8 @@ for fidx = 1:nFiles
   cen1(:,3) = [];
   cen2(:,3) = [];
 
-  cen1 .*= [39.5 39.5 125];
-  cen2 .*= [39.5 39.5 125];
+  cen1 .*= voxel_sizes;
+  cen2 .*= voxel_sizes;
 
   [nn_dist_1to2, nn_idx_1to2] = min (pdist2 (cen2, cen1, "sqeuclidean"));
   nn_dist_1to2 = sqrt (nn_dist_1to2);
@@ -203,8 +241,9 @@ for fidx = 1:nFiles
 
   h = figure ();
   boxplot ({nn_dist_1to2(:) nn_dist_2to1(:)});
-  set (gca (), "xtick", [1 2], "xticklabel", {"1 to 2", "2 to 1"});
-
+  set (gca (), "xtick", [1 2], "xticklabel",
+       {[channels{foci_channels(1)} " to " channels{foci_channels(2)}],
+        [channels{foci_channels(2)} " to " channels{foci_channels(1)}]});
 
   annotate_stats ([0.2 0.7 1 1], nn_dist_1to2(:));
   annotate_stats ([0.7 0.7 1 1], nn_dist_2to1(:));
@@ -212,4 +251,3 @@ for fidx = 1:nFiles
   close (h);
 
 endfor
-
