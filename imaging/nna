@@ -17,7 +17,9 @@
 
 pkg load image;
 pkg load statistics;
+pkg load bioformats;
 
+javaMethod ("enableLogging", "loci.common.DebugTools", "ERROR");
 page_output_immediately (1);
 more ("off");
 
@@ -140,6 +142,19 @@ for fidx = 1:nFiles
   csv1_fpath = fullfile (fdir, [fname "-data_1.csv"]);
   csv2_fpath = fullfile (fdir, [fname "-data_2.csv"]);
   plot_fpath = fullfile (fdir, [fname "-boxplot.pdf"]);
+
+  reader = bfGetReader (fpath);
+  if (reader.getSizeC () != 3)
+    warning ("file `%s' does not have 3 channels. Skipping...", fpath);
+    continue;
+  elseif (reader.getSizeT () != 1)
+    warning ("file `%s' is a time-series. Skipping...", fpath);
+    continue;
+  elseif (reader.getSizeZ () == 1)
+    warning ("file `%s' is not a Z stack. Skipping...", fpath);
+    continue;
+  endif
+  order = reader.getDimensionOrder ();
 
   im    = imread (fpath, "Index", "all");
   dapi  = im(:,:,:,1:3:end);
