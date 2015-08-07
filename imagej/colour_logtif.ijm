@@ -44,8 +44,8 @@ Stack.setPosition(4, 1, 1);
 run("Magenta");
 
 Stack.setPosition(5, 1, 1);
-run("Blue");
+run("Grays");
 Stack.setPosition(6, 1, 1);
-run("Yellow");
+run("Blue");
 
 run("Save");
