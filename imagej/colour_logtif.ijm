@@ -44,14 +44,14 @@ for (i=0; i<list.length; i++) {
                         + " voxel_depth=0.125");
 
                     Stack.setPosition(1, 1, 1);
-                    run("Green");
+                    run("Red");
                     Stack.setPosition(2, 1, 1);
-                    run("Cyan");
+                    run("Magenta");
 
                     Stack.setPosition(3, 1, 1);
-                    run("Red");
+                    run("Green");
                     Stack.setPosition(4, 1, 1);
-                    run("Magenta");
+                    run("Cyan");
 
                     Stack.setPosition(5, 1, 1);
                     run("Grays");
