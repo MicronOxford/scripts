@@ -21,6 +21,7 @@ import webbrowser
 
 import wx
 import wx.lib.intctrl
+import wx.lib.mixins.listctrl
 
 NDSAFIR_PATH = "/opt/priism/bin/ndsafir_priism"
 
@@ -200,15 +201,29 @@ class OptionsPanel(wx.Panel):
       OptionsPanel.CommandLineOptionCtrl.__init__(self, arg_name)
 
 
+
+class AutoWidthListCtrl(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
+  """ListCtrl with last column taking up all space.
+
+  In theory, we should be able to do `width=wx.LIST_AUTOSIZE_USEHEADER`
+  when inserting the last column that it would "fit the column width to
+  heading or to extend to fill all the remaining space for the last column."
+  However, that does not happen, and we need to use this mixin class.
+  See http://stackoverflow.com/a/11314767/1609556
+  """
+  def __init__(self, *args, **kwargs):
+    wx.ListCtrl.__init__(self, *args, **kwargs)
+    wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin.__init__(self)
+    self.resizeLastColumn(0)
+
 class FileListPanel(wx.Panel):
   def __init__(self, *args, **kwargs):
     wx.Panel.__init__(self, *args, **kwargs)
 
-    self.file_list_ctrl = wx.ListCtrl(self, style=wx.LC_REPORT)
-    self.file_list_ctrl.InsertColumn(0, 'Filename')
-    self.file_list_ctrl.InsertColumn(1, 'Path')
-
-    btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+    self.file_list_ctrl = AutoWidthListCtrl(self, style=wx.LC_REPORT)
+    self.file_list_ctrl.InsertColumn(0, "Path")
+    self.file_list_ctrl.InsertColumn(1, "Filename")
+    btn_sizer = wx.BoxSizer(wx.VERTICAL)
 
     add_btn = wx.Button(self, label="Add")
     add_btn.Bind(wx.EVT_BUTTON, self.on_add_EVT_BUTTON)
@@ -222,9 +237,9 @@ class FileListPanel(wx.Panel):
     clear_btn.Bind(wx.EVT_BUTTON, self.on_clear_EVT_BUTTON)
     btn_sizer.Add(clear_btn)
 
-    sizer = wx.BoxSizer(wx.VERTICAL)
-    sizer.Add(self.file_list_ctrl, flag=wx.ALL|wx.EXPAND)
-    sizer.Add(btn_sizer, flag = wx.ALL|wx.CENTER)
+    sizer = wx.BoxSizer(wx.HORIZONTAL)
+    sizer.Add(self.file_list_ctrl, proportion=1, flag=wx.EXPAND|wx.ALL)
+    sizer.Add(btn_sizer)
     self.SetSizer(sizer)
 
   def on_add_EVT_BUTTON(self, event):
@@ -235,7 +250,7 @@ class FileListPanel(wx.Panel):
                                     | wx.FD_MULTIPLE))
     if dialog.ShowModal() == wx.ID_OK:
       for file in dialog.GetPaths():
-        self.file_list_ctrl.Append(os.path.split(file)[2::-1])
+        self.file_list_ctrl.Append(os.path.split(file))
     event.Skip()
 
   def on_rm_EVT_BUTTON(self, event):
@@ -261,8 +276,8 @@ class NdsafirBatchFrame(wx.Frame):
     self.options_panel = OptionsPanel(self)
     conf_sizer.Add(self.options_panel)
     self.file_list_panel = FileListPanel(self)
-    conf_sizer.Add(self.file_list_panel)
-    sizer.Add(conf_sizer, wx.EXPAND|wx.ALL)
+    conf_sizer.Add(self.file_list_panel, proportion=1, flag=wx.EXPAND|wx.ALL)
+    sizer.Add(conf_sizer, proportion=1, flag=wx.EXPAND|wx.ALL)
 
     btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
     help_btn = wx.Button(self, label="Help")
@@ -298,4 +313,6 @@ if __name__ == "__main__":
   app = wx.App(False)
   frame = NdsafirBatchFrame()
   frame.Show()
+  import wx.lib.inspection
+  wx.lib.inspection.InspectionTool().Show()
   app.MainLoop()
