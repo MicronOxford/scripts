@@ -17,12 +17,25 @@
 
 pkg load image;
 pkg load statistics;
-pkg load imagej;
+
+## Check if we have java support and ImageJ on the javaclasspath
+if (! octave_config_info ("features").JAVA)
+  error ("support for java was disabled when Octave was built");
+endif
+try
+  javaMethod ("getVersion", "ij.IJ");
+catch
+  error (["image: the ij java library is missing (check javaclasspath)"]);
+end_try_catch
 
 page_output_immediately (1);
 more ("off");
 
-graphics_toolkit ("qt");
+if (ismember ("qt", available_graphics_toolkits ()))
+  graphics_toolkit ("qt");
+else
+  graphics_toolkit ("gnuplot");
+endif
 set (0, "defaultfigurevisible", "off");
 
 ## We should fix regionprops instead of implementing it here
