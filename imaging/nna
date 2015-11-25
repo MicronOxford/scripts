@@ -38,33 +38,6 @@ else
 endif
 set (0, "defaultfigurevisible", "off");
 
-## We should fix regionprops instead of implementing it here
-function props = area_and_centroids (cc, im)
-  Area = cellfun (@numel, cc.PixelIdxList);
-
-  no = cc.NumObjects;
-  sz = cc.ImageSize;
-  nd = numel (sz);
-  rn = 1:no;
-  R  = [rn; Area];
-
-  idx = cell2mat (cc.PixelIdxList(:));
-  sub = cell2mat (nthargout (1:nd, @ind2sub, sz, idx));
-
-  vals = im(idx);
-  subs = vec (repelems (rn, [rn; Area]));
-
-  totals = repelems (accumarray (subs, vals), R);
-  weighted_sub = sub .* (double (vals) ./ vec (totals));
-  weighted_cen = accumarray (vec (repmat (subs, [1 nd]) .+ [0:no:(no*nd-1)]),
-                             vec (weighted_sub), [no nd]);
-
-  ## Swap X and Y coordinates for Matlab compatibility
-  weighted_cen(:,[1 2]) = weighted_cen(:,[2 1]);
-
-  props = struct ("Area", Area, "WeightedCentroid", weighted_cen);
-endfunction
-
 function dapi_mask_clean = get_dapi_mask (dapi)
   se_2d = strel ("disk", 3, 0);
   se_3d = strel ("arbitrary", repmat (getnhood (se_2d), [1 1 3]));
@@ -93,8 +66,7 @@ function [centroids, r_area] = get_centroids (im, mask)
   bw = bwareaopen (logical (im), 10);
   cc = bwconncomp (bw);
 
-  props = area_and_centroids (cc, im);
-
+  props = regionprops (cc, {"Area", "Centroids"});
   centroids = cell2mat({props(:).WeightedCentroid}(:));
   r_area = [props(:).Area];
 endfunction
