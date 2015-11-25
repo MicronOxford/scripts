@@ -188,8 +188,10 @@ for fidx = 1:nFiles
     if (numel (blue_channel) > 1)
       warning ("multiple blue channels (DAPI) found for `%s'. Skipping...",
                fpath);
+      continue;
     elseif (isempty (blue_channel))
       warning ("no blue channel (DAPI) found for `%s'. Skipping...", fpath);
+      continue;
     endif
     foci_channels = setdiff ([1 2 3], blue_channel);
 
