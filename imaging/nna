@@ -60,13 +60,12 @@ function [centroids, r_area] = get_centroids (im, mask)
   bw = im2bw (im, graythresh (im(mask)));
   im(! bw | ! mask) = 0;
   imc = imcomplement (im);
-  seg = watershed (imc);
-  im = imcomplement (imc);
-  im(! seg) = 0;
+  w_lines = ! watershed (imc);
+  im(w_lines) = 0;
   bw = bwareaopen (logical (im), 10);
 
   props = regionprops (bw, img, {"Area", "WeightedCentroid"});
-  centroids = cell2mat({props(:).WeightedCentroid}(:));
+  centroids = cell2mat ({props(:).WeightedCentroid}(:));
   r_area = [props(:).Area];
 endfunction
 
@@ -184,6 +183,7 @@ for fidx = 1:nFiles
   dapi  = im(:,:,:,blue_channel:3:end);
   chan1 = im(:,:,:,foci_channels(1):3:end);
   chan2 = im(:,:,:,foci_channels(2):3:end);
+  clear im;
 
   dapi_mask = get_dapi_mask (dapi);
 
