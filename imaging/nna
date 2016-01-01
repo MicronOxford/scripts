@@ -64,7 +64,7 @@ function [centroids, r_area] = get_centroids (im, mask)
   im(w_lines) = 0;
   bw = bwareaopen (logical (im), 10);
 
-  props = regionprops (bw, img, {"Area", "WeightedCentroid"});
+  props = regionprops (bw, im, {"Area", "WeightedCentroid"});
   centroids = cell2mat ({props(:).WeightedCentroid}(:));
   r_area = [props(:).Area];
 endfunction
