@@ -1,0 +1,54 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+## Copyright (C) 2016 Carnë Draug
+##
+## This program is free software; you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation; either version 3 of the License, or
+## (at your option) any later version.
+##
+## This program is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with this program; if not, see <http://www.gnu.org/licenses/>.
+
+import os.path
+import sys
+import fileinput
+
+import omero.util
+
+def main(argv):
+  """Check if omero data file exists.
+
+  SYNOPSIS
+    check-omero-data OMERO-DIR DATA-TYPE [FILES-IDS] [-]
+
+  DESCRIPTION
+    Prints back ids of missing files.
+  """
+  omero_dir = argv[1]
+  if not os.path.isdir(omero_dir):
+    sys.exit("confirm-data: OMERO-DIR '%s' is not a directory" % omero_dir)
+
+  data_type = argv[2]
+  data_dir = os.path.join(omero_dir, data_type)
+  if not os.path.isdir(data_dir):
+    sys.exit("confirm-data: OMERO-DIR/DATA-TYPE '%s' is not a directory"
+              % data_dir)
+
+  for id in fileinput.input(argv[3:]):
+    id = id.strip()
+    path = omero.util.long_to_path(long(id))
+    path = os.path.join(data_dir, path)
+    if not os.path.isfile(path):
+      print id
+
+  return 0
+
+if __name__ == "__main__":
+  sys.exit(main(sys.argv))
