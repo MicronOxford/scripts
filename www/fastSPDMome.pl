@@ -177,6 +177,7 @@ my $pixel_size      = untaint_float ('px');
 my $plot_distance   = untaint_bool  ('plotd');
 my $filter1         = untaint_bool  ('filter1'); # correction for long-lasting fluorescence
 my $filter2         = untaint_bool  ('filter2'); # correction for blinking fluorophores
+my $filter3         = untaint_bool  ('filter3'); # cut off small distances
 
 ###
 ### Generate Matlab code
@@ -188,7 +189,7 @@ try
   addpath ('/usr/local/lib/MATLAB/site-toolboxes/dipimage/dipimage');
   dip_initialise ('silent');
   addpath ('$fastSPDMome_path');
-  fastSPDMome ('$image_path', $gain_correction, $filter1, $filter2, $pixel_size, $plot_distance);
+  fastSPDMome ('$image_path', $gain_correction, $filter1, $filter2, $pixel_size, $plot_distance, $filter3);
 catch err
   disp (['error: ' err.message()]);
   disp (err.stack ());
