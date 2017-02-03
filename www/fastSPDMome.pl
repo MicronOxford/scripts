@@ -97,7 +97,7 @@ $CGI::POST_MAX = 1024 * 1000 * 200; # max 200MB file uploads
 
 my $matlab_path = '/usr/local/MATLAB/R2010b/bin/matlab';
 my @matlab_args = ('-nodisplay', '-nosplash'); # consider -nojvm in the future
-my $fastSPDMome_path = '/home/carandraug/dstorm-tst/locmic/';
+my $fastSPDMome_path = '/usr/local/share/fastSPDMome/';
 
 ## Maximum time allowed (in seconds) before killing the process.
 ## This is more than just the time given to Matlab. Even if we give Matlab
