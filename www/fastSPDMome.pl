@@ -272,7 +272,7 @@ sub get_output_files {
   close ($dirh);
 
   my %files;
-  foreach my $key ("imstres", "log") {
+  foreach my $key ("imstres", "log", "positions") {
     ## Get file name with the key closer to the end of the filename
     my %rind = map {$_ => rindex ($_, $key)} @fnames;
     $files{$key} = (sort {$rind{$b} <=> $rind{$a}} @fnames)[0];
@@ -334,6 +334,12 @@ sub get_display {
   }
 }
 
+sub offer_positions {
+  my $positions_web = shift;
+  return $cgi->a({href => $positions_web},
+                 "Download positions matrix text file");
+}
+
 sub center_pre {
   return $cgi->p($cgi->table({-style=>"display: inline-table;text-align:left;"},
     $cgi->Tr([$cgi->td($cgi->pre(shift))])
@@ -342,15 +348,16 @@ sub center_pre {
 
 ## The reconstructed image. That's the main thing we care about.
 my ($imstres_path, $imstres_webpath) = save_file($output{'imstres'});
+my ($positions_path, $positions_webpath) = save_file($output{'positions'});
 
 print $cgi->header();
 print $cgi->start_html(-title => 'localized', -BGCOLOR => "#353535");
 
 print $cgi->div({-style=>"text-align:center;color:#CCCCCC"},
   center_pre(slurp_log (File::Spec->catfile($tmp_dir, $output{'log'}))),
-  get_display($imstres_path, $imstres_webpath),
+  $cgi->p(get_display($imstres_path, $imstres_webpath)),
+  $cgi->p(offer_positions($positions_webpath)),
   center_pre($code),
 );
 
 print $cgi->end_html();
-
