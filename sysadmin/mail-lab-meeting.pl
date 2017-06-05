@@ -50,7 +50,7 @@ use LWP::Simple;                        # get wiki page
 use DateTime;                           # date comparisons
 
 my $from  = 'Ian Dobbie <ian.dobbie@bioch.ox.ac.uk>';
-my $wiki  = 'http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings';
+my $wiki  = 'http://wiki.micron.ox.ac.uk/w/Speakers_at_lab_meetings';
 
 my @tos;      # valid emails to deliver the message
 
@@ -138,7 +138,7 @@ As always, the list of speakers can be found on our wiki [1].
 Best regards,
 Micron
 
-[1] http://micronwiki.bioch.ox.ac.uk/wiki/Speakers_at_lab_meetings
+[1] $wiki
 EOF
 
 my $email = Email::Simple->create (
@@ -151,4 +151,3 @@ my $email = Email::Simple->create (
 );
 
 sendmail ($email);
-
