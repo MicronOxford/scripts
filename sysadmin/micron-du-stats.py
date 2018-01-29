@@ -16,8 +16,23 @@
 ## You should have received a copy of the GNU General Public License
 ## along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-## Read our disk usage logs to create some stats.
+## NAME
+##   micron-du-stats -- read and analyse disk usage logs
+##
+## SYNOPSIS
+##   micron-du-stats [--omero-data OMERO-DU-DIR] [--fs-data FS-DU-DIR]
+##
+## DESCRIPTION
+##   Perform the analysis for either the OMERO disk usage or the
+##   micron file servers.  Needs the path for a directory where each
+##   du timepoint is an individal file.  Files should be named like:
+##
+##     omero-du-$(date --utc '+\%Y\%m\%d\%H\%M')
+##     micronusers-du-$(date --utc '+\%Y\%m\%d\%H\%M')
+##
 
+import argparse
+import collections
 import datetime
 import json
 import os
@@ -26,9 +41,10 @@ import sys
 import matplotlib.pyplot
 
 class PIGroup():
-    def __init__(self, pi_name, affiliation):
+    def __init__(self, pi_name, affiliation, unix_gid):
         self.pi_name = pi_name
         self.affiliation = affiliation
+        self.unix_gid = unix_gid
 
 class OMEROGroup():
     def __init__(self, omero_gid, name, payee):
@@ -38,63 +54,91 @@ class OMEROGroup():
 
 def _create_PI_groups():
     groups = [
-        ['Alfredo Castello', 'Oxford Biochemistry'],
-        ['Alison Woollard', 'Oxford Biochemistry'],
-        ['Andre Furger', 'Oxford Biochemistry'],
-        ['Bela Novak', 'Oxford Biochemistry'],
-        ['Ben Berks', 'Oxford Biochemistry'],
-        ['Bungo Akiyoshi', 'Oxford Biochemistry'],
-        ['Clive Wilson', 'Oxford DPAG'],
-        ['Colin Kleanthous', 'Oxford Biochemistry'],
-        ['David Sherrat', 'Oxford Biochemistry'],
-        ['David Vaux', 'Oxford Pathology'],
-        ['Duncan Sparrow', 'Oxford DPAG'],
-        ['Elizabeth Robertson', 'Oxford Pathology'],
-        ['Ervin Fodor', 'Oxford Pathology'],
-        ['Eva Gluenz', 'Oxford Pathology'],
-        ['Francis Barr', 'Oxford Biochemistry'],
-        ['George Tofaris', 'Oxford Clinical Neurosciences'],
-        ['Hagan Bayley', 'Oxford Chemistry'],
-        ['Ian Moore', 'Oxford Plant Sciences'],
-        ['Ilan Davis', 'Oxford Biochemistry'],
-        ['Jane Mellor', 'Oxford Biochemistry'],
-        ['Jason Schnell', 'Oxford Biochemistry'],
-        ['John Vakonakis', 'Oxford Biochemistry'],
-        ['Jonathan Hodgkin', 'Oxford Biochemistry'],
-        ['Jordan Raff', 'Oxford Pathology'],
-        ['Judy Armitage', 'Oxford Biochemistry'],
-        ['Kay Grünewald', 'Oxford STRUBI'],
-        ['Keith Gull', 'Oxford Pathology'],
-        ['Kevin Foster', 'Oxford Zoology'],
-        ['Kim Nasmyth', 'Oxford Biochemistry'],
-        ['Lothar Schermelleh', 'Oxford Biochemistry'],
-        ['Luis Alberto Baena-López', 'Oxford Pathology'],
-        ['Mark Howarth', 'Oxford Biochemistry'],
-        ['Mark Leake', 'University of York'],
-        ['Martin Booth', 'Oxford Engineering Science'],
-        ['Martin Cohn', 'Oxford Biochemistry'],
-        ['Matthew Freeman', 'Oxford Pathology'],
-        ['Matthew Whitby', 'Oxford Biochemistry'],
-        ['Micron', 'Oxford Biochemistry'],
-        ['Monika Gullerova', 'Oxford Pathology'],
-        ['Neil Brockdorff', 'Oxford Biochemistry'],
-        ['Paul Klenerman', 'Oxford Medicine'],
-        ['Paul Riley', 'Oxford DPAG'],
-        ['Petros Ligoxygakis', 'Oxford Biochemistry'],
-        ['Philip Biggin', 'Oxford Biochemistry'],
-        ['Richard Berry', 'Oxford Physics'],
-        ['Rob Klose', 'Oxford Biochemistry'],
-        ['Shabaz Mohammed', 'Oxford Biochemistry'],
-        ['Simon Butt', 'Oxford DPAG'],
-        ['Stephan Uphoff', 'Oxford Biochemistry'],
-        ['Stephen Taylor', 'Oxford WIMM'],
-        ['Suzannah Williams', 'Oxford Women\' and reproductive health'],
-        ['Tim Nott', 'Oxford Biochemistry'],
-        ['Ulrike Gruneberg', 'Oxford Pathology'],
+        ['Achillefs Kapanidis', 'Physics', 18790],
+        ['Alfredo Castello', 'Biochemistry', 18764],
+        ['Alison Woollard', 'Biochemistry', 10510],
+        ['Andre Furger', 'Biochemistry', 10720],
+        ['Andreas Russ', 'Biochemistry', 10730], # FIXME
+        ['Andrew King', 'DPAG', 18817],
+        ['Armitage and SBCB', 'Biochemistry', 170], # FIXME
+        ['Bela Novak', 'Biochemistry', 10930],
+        ['Ben Berks', 'Biochemistry', 10560],
+        ['Bungo Akiyoshi', 'Biochemistry', 18756],
+        ['Catherine Pears', 'Biochemistry', 10140],
+        ['Clive Wilson', 'DPAG', 18781],
+        ['Colin Kleanthous', 'Biochemistry', 18752],
+        ['David Sherrat', 'Biochemistry', 10590],
+        ['David Vaux', 'Pathology', 18800],
+        ['Duncan Sparrow', 'DPAG', 18772],
+        ['Elena Seiradake', 'Biochemistry', 18763],
+        ['Elizabeth Robertson', 'Pathology', 18788],
+        ['Ervin Fodor', 'Pathology', None],
+        ['Eva Gluenz', 'Pathology', None],
+        ['External', 'Biochemistry', 12501], # FIXME
+        ['Frances Ashcroft', 'DPAG', 18810],
+        ['Francis Barr', 'Biochemistry', 18747],
+        ['George Tofaris', 'Clinical Neurosciences', 18795],
+        ['Hagan Bayley', 'Chemistry', 18773],
+        ['Ian Moore', 'Plant Sciences', 18791],
+        ['Ilan Davis new', 'Biochemistry', 18819],
+        ['Ilan Davis', 'Biochemistry', 1000], # FIXME
+        ['Jane Mellor', 'Biochemistry', 10150],
+        ['Jason Schnell', 'Biochemistry', None],
+        ['John Vakonakis', 'Biochemistry', None],
+        ['Jonathan Hodgkin', 'Biochemistry', 10500],
+        ['Jordan Raff', 'Pathology', 2700],
+        ['Judy Armitage', 'Biochemistry', 10580],
+        ['Kay Grünewald', 'STRUBI', 18813],
+        ['Keith Gull', 'Pathology', None],
+        ['Kevin Foster', 'Zoology', 2702],
+        ['Kim Nasmyth', 'Biochemistry', 10790],
+        ['Lidia Vasilieva', 'Biochemistry', 2800],
+        ['Lothar Schermelleh', 'Biochemistry', 18749],
+        ['Luis Alberto Baena-López', 'Pathology', 18784],
+        ['Lynne Cox', 'Biochemistry', 10410],
+        ['Mark Howarth', 'Biochemistry', 10910],
+        ['Mark Leake', 'University of York', None],
+        ['Martin Booth', 'Engineering Science', 18783],
+        ['Martin Cohn', 'Biochemistry', 18750],
+        ['Masud Husain', 'Clinical Neurosciences', 18818],
+        ['Mathilda Mommersteeg', 'DPAG', 18794],
+        ['Matt Higgins', 'Biochemistry', 10116],
+        ['Matthew Freeman', 'Pathology', 18808],
+        ['Matthew Whitby', 'Biochemistry', 10620],
+        ['Michael Dustin', 'Kennedy', 18796],
+        ['Michael Kohl', 'DPAG', 18778],
+        ['Micron Extra', 'Biochemistry', 18753], # FIXME
+        ['Micron enginners', 'Biochemistry', 18765],
+        ['Micron', 'Biochemistry', 18754],
+        ['Ming Lei', 'Pharmacology', 18793],
+        ['Monika Gullerova', 'Pathology', 18786],
+        ['Neil Brockdorff', 'Biochemistry', 10940],
+        ['Nicholas Proudfoot', 'Pathology', 18787],
+        ['Not assigned', 'Biochemistry', 18755], # FIXME
+        ['Paul Klenerman', 'Medicine', 18801],
+        ['Paul Riley', 'DPAG', 18779],
+        ['Paul Wentworth', 'Biochemistry', 10740],
+        ['Penny Handford', 'Biochemistry', 10345],
+        ['Petros Ligoxygakis', 'Biochemistry', 10700],
+        ['Philip Biggin', 'Biochemistry', None],
+        ['Proteomics', 'Biochemistry', 10950], # FIXME
+        ['Richard Berry', 'Physics', None],
+        ['Richard Wade-Martins', 'DPAG', 18780],
+        ['Rob Klose', 'Biochemistry', 10911],
+        ['Ruth Brown', 'Biochemistry', 10640], # FIXME
+        ['Shabaz Mohammed', 'Biochemistry', 18760],
+        ['Shankar Srinivas', 'DPAG', 18766],
+        ['Simon Butt', 'DPAG', 18775],
+        ['Stephan Uphoff', 'Biochemistry', 18803],
+        ['Stephen Taylor', 'WIMM', 18797],
+        ['Suzannah Williams', 'Women\' and reproductive health', None],
+        ['Terry Butters', 'Biochemistry', 10012],
+        ['Tim Nott', 'Biochemistry', None],
+        ['Ulrike Gruneberg', 'Pathology', 18777],
+        ['Wolfson Imaging Center', 'WIMM', 18767],
     ]
-    return [PIGroup(x[0], x[1]) for x in groups]
+    return [PIGroup(x[0], x[1], x[2]) for x in groups]
 PI_GROUPS = _create_PI_groups()
-INSTITUTES = list(set([x.affiliation for x in PI_GROUPS]))
 
 def _create_omero_groups():
     groups = [
@@ -185,119 +229,61 @@ def _create_omero_groups():
     return omero_groups
 OMERO_GROUPS = _create_omero_groups()
 
+## Mapping SSO to people names.  There's a lot of them but we only use
+## this to find the ones with most usage so we can get away with only
+## a few.
+## for SSO in ... ; do
+##   NAME=`ldapsearch ... -W "cn=$SSO" -LLL displayName | grep displayName | sed "s,displayName: ,,"`
+##   echo "'$SSO' : '$NAME',"
+## done
+USERNAMES = {
+    'dpag0482' : 'Matthew Stower',
+    'dpag0443' : 'Richard Tyser',
+    'clab0281' : 'Christoffer Lagerholm',
+    'dpag0665' : 'Navrita Mathiah',
+    'bioc0759' : 'Richard Parton',
+    'path0636' : 'Jordan Raff',
+    'path0655' : 'Anna Franz',
+    'path0693' : 'Helio Duarte Roque',
+    'path1050' : 'Lior Pytowski',
+    'bioc1108' : 'Ricardo Nunes Bastos',
+    'quee2159' : 'Stephan Uphoff',
+    'dpag0033' : 'Tomoko Watanabe',
+    'trin2450' : 'Greta Pintacuda',
+    'chri3774' : 'Alex Davidson',
+    'zool0788' : 'Alan Wainman',
+    'dpag0794' : 'Irina Stefana',
+    'bioc0882' : 'Ian Dobbie',
+    'bioc1117' : 'Sapan Gandhi',
+    'wolf4192' : 'Ezequiel Miron Sardiello',
+    'bioc1083' : 'Eva Wegel',
+    'shug3995' : 'Kirsty Gill',
+    'bioc0877' : 'Timothy Weil',
+    'bioc1322' : 'Ana Palanca Cunado',
+    'bioc1350' : 'Cvic Innocent',
+    'bioc1389' : 'Alexander Al Saroori',
+    'bioc1194' : 'Justin Demmerle',
+    'path0656' : 'Paul Conduit',
+    'bioc0847' : 'Tatyana Nesterova',
+    'linc3440' : 'Davinderpreet Mangat',
+    'bioc0750' : 'Raquel Cardosa de Oliveira',
+    'quee2608' : 'Lu Yang',
+    'bioc1090' : 'Lothar Schermelleh',
+    'shug1880' : 'James Halstead',
+    'bioc0954' : 'Christian Lesterlin',
+    'bioc0861' : 'Heather Coker',
+    'path1006' : 'Anna Caballe',
+    'linc3876' : 'Holly Hathrell',
+    'bioc0780' : 'Russell Hamilton',
+    'path0893' : 'James Bancroft',
+    'sedm3887' : 'Felix Castellanos Suarez',
+    'mert2301' : 'Francoise Howe',
+}
+
+
 def update_id_maps():
     # bin/omero group list --style plain
-  pass
-
-def load_omero_du(dir_path):
-    """Read the omero du data from a directory.
-
-    Returns a dict of nested dicts like this:
-
-    datetime1:
-        omerogroup1:
-            omero_user_id_1 : nbytes
-            omero_user_id_2 : nbytes
-            omero_user_id_3 : nbytes
-        omerogroup2:
-            omero_user_id_1 : nbytes
-            omero_user_id_4 : nbytes
-            omero_user_id_5 : nbytes
-    datetime2:
-        omerogroup1:
-            omero_user_id_1 : nbytes
-            omero_user_id_3 : nbytes
-            omero_user_id_4 : nbytes
-        omerogroup3:
-            omero_user_id_1 : nbytes
-            omero_user_id_6 : nbytes
-            omero_user_id_7 : nbytes
-    """
-    omerodu = dict()
-    for fname in os.listdir(dir_path):
-        fparts = fname.split("-")
-        if len(fparts) != 3 or fparts[0:2] != ['omero', 'du']:
-            raise RuntimeError("not an omero-du filename '%s'" % fname)
-
-        date = datetime.datetime.strptime(fparts[2], '%Y%m%d%H%M')
-        with open(os.path.join(dir_path, fname), 'r') as fh:
-            omerodu[date] = json.load(fh)
-    return omerodu
-
-def plot_total_du(du):
-    total_du = dict()
-    for date, du in du.items():
-        total = 0
-        for users in du.values():
-            total += sum(users.values())
-        total /= (1024.0 ** 4) # from bytes to TB (powers of 1024)
-        total_du[date] = total
-
-    fig, ax = matplotlib.pyplot.subplots()
-    ax.plot_date(*zip(*sorted(total_du.items())))
-
-    ## Only label the year but have ticks for every month.
-    ax.xaxis.set_major_locator(matplotlib.dates.YearLocator())
-    ax.xaxis.set_minor_locator(matplotlib.dates.MonthLocator())
-    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%Y'))
-
-    matplotlib.pyplot.title("OMERO total disk usage")
-    matplotlib.pyplot.ylabel("Disk Usage in TB (powers of 1024)")
-    matplotlib.pyplot.show()
-
-def plot_by_institute(du):
-    last_du = du[sorted(du.keys())[-1]]
-    group_total = dict()
-    for gid, users in last_du.items():
-        group_total[gid] = sum(users.values())
-
-    institute_du = {l : 0 for l in INSTITUTES}
-    for gid, grp_du in group_total.items():
-        omero_grp = OMERO_GROUPS[int(gid)]
-        institute_du[omero_grp.payee.affiliation] +=grp_du
-
-    institute_du = {k:v for k,v in institute_du.items() if v > 0}
-    for l, x, in institute_du.items():
-        institute_du[l] /= 1024.0 ** 4
-
-    lpos = range(len(institute_du.keys()))
-    fig, ax = matplotlib.pyplot.subplots()
-    ax.barh(lpos, [institute_du[l] for l in institute_du.keys()],
-            align='center')
-
-    ax.set_yticks(lpos)
-    ax.set_yticklabels([l.replace('Oxford ', '') for l in institute_du.keys()])
-    ax.invert_yaxis()  # labels read top-to-bottom
-    matplotlib.pyplot.title("OMERO disk usage by Department")
-    matplotlib.pyplot.xlabel("Disk Usage in TB (powers of 1024)")
-    matplotlib.pyplot.show()
-
-def plot_by_group(du):
-    last_du = du[sorted(du.keys())[-1]]
-    group_total = dict()
-    for gid, users in last_du.items():
-        group_total[gid] = sum(users.values())
-
-    pi_group_du = {grp.pi_name : 0 for grp in PI_GROUPS}
-    for gid, grp_du in group_total.items():
-        omero_grp = OMERO_GROUPS[int(gid)]
-        pi_group_du[omero_grp.payee.pi_name] +=grp_du
-
-    pi_group_du = {k:v for k,v in pi_group_du.items() if v > 0}
-    for l, x, in pi_group_du.items():
-        pi_group_du[l] /= 1024.0 ** 4
-
-    lpos = range(len(pi_group_du.keys()))
-    fig, ax = matplotlib.pyplot.subplots()
-    ax.barh(lpos, [pi_group_du[grp] for grp in pi_group_du.keys()],
-            align='center')
-
-    ax.set_yticks(lpos)
-    ax.set_yticklabels(list(pi_group_du.keys()))
-    # ax.invert_yaxis()  # labels read top-to-bottom
-    matplotlib.pyplot.title("OMERO disk usage by PI group")
-    matplotlib.pyplot.xlabel("Disk Usage in TB (powers of 1024)")
-    matplotlib.pyplot.show()
+    pass
 
 def n_users_stats():
     ## extract users from the booking system from
@@ -311,12 +297,259 @@ def n_users_stats():
     ##   grep -v -f uniq-path uniq-bioch | wc -l
     pass
 
-def main(argv):
-    omerodu = load_omero_du(argv[0])
-    plot_by_institute(omerodu)
-    plot_by_group(omerodu)
-    plot_total_du(omerodu)
 
+def bytes2GiB(nbytes):
+    """Convert bytes to Gi bytes"""
+    return nbytes / (1024 ** 3)
+
+def bytes2TiB(nbytes):
+    """Convert bytes to Ti bytes"""
+    return nbytes / (1024 ** 4)
+
+def TiB2bytes(nTi):
+    """Convert Ti bytes to bytes"""
+    return nTi * (1024 ** 4)
+
+def date_from_filename(fname, prefix):
+    fparts = fname.split("-")
+    if len(fparts) != 3 or fparts[0:2] != [prefix, 'du']:
+        raise RuntimeError("not an %s-du filename '%s'"
+                           % (prefix, fname))
+    return datetime.datetime.strptime(fparts[2], '%Y%m%d%H%M')
+
+
+class DU():
+    def latest(self):
+        return self.du[sorted(self.du.keys())[-1]]
+
+    def over_time(self):
+        """Returns a dict, keys are datetime, values are number of bytes.
+        """
+        total_du = dict()
+        for date, timepoint in self.du.items():
+            total = 0
+            for users in timepoint.values():
+                total += sum(users.values())
+            total_du[date] = total
+        return total_du
+
+    def by_pi_group(self):
+        grp_map = self.gid_to_PIgroup()
+
+        totals = {g.pi_name : 0 for g in grp_map.values()}
+        for gid, users in self.latest().items():
+            totals[grp_map[gid].pi_name] += sum(users.values())
+        return totals
+
+    def by_institute(self):
+        grp_map = self.gid_to_PIgroup()
+
+        totals = {g.affiliation : 0 for g in grp_map.values()}
+        for gid, users in self.latest().items():
+            totals[grp_map[gid].affiliation] += sum(users.values())
+        return totals
+
+    def by_users(self):
+        totals = dict()
+        for users in self.latest().values():
+            for uid, nbytes in users.items():
+                totals[uid] = totals.get(uid, 0) + nbytes
+        return totals
+
+
+class OmeroDU(DU):
+    def __init__(self, dir_path):
+        """Read the omero du data from a directory.
+        datetime1:
+            omerogroup1:
+                omero_user_id_1 : nbytes
+                omero_user_id_2 : nbytes
+                omero_user_id_3 : nbytes
+            omerogroup2:
+                omero_user_id_1 : nbytes
+                omero_user_id_4 : nbytes
+                omero_user_id_5 : nbytes
+        datetime2:
+            omerogroup1:
+                omero_user_id_1 : nbytes
+                omero_user_id_3 : nbytes
+                omero_user_id_4 : nbytes
+            omerogroup3:
+                omero_user_id_1 : nbytes
+                omero_user_id_6 : nbytes
+                omero_user_id_7 : nbytes
+        """
+        omerodu = dict()
+        for fname in os.listdir(dir_path):
+            date = date_from_filename(fname, 'omero')
+            with open(os.path.join(dir_path, fname), 'r') as fh:
+                timepoint = json.load(fh)
+                ## convert the numeric ids from str to int
+                fixed_timepoint = dict()
+                for gid, users in timepoint.items():
+                    fixed_group = dict()
+                    for uid, nbytes in users.items():
+                        fixed_group[int(uid)] = nbytes
+                    fixed_timepoint[int(gid)] = fixed_group
+                omerodu[date] = fixed_timepoint
+        self.du = omerodu
+
+    def gid_to_PIgroup(self):
+        return {grp.omero_gid : grp.payee for grp in OMERO_GROUPS.values()}
+
+
+class FSDU(DU):
+    def __init__(self, dir_path):
+        """Read the micron file servers data from a directory.
+
+        These are plain text files, one line per usage with:
+
+            unix_username unix_uid primary_group_gid user_quota_blocks
+
+        Caveats:
+          * because of the mess of filesystems we have, there may be
+            multiple lines per user (one per user per filesystem).
+            Multiple lines will need to be added together.
+          * users may have data in different groups.. However, we only
+            have their primary group.
+        """
+        du = dict()
+        for fname in os.listdir(dir_path):
+            date = date_from_filename(fname, 'micronusers')
+            timepoint = dict()
+            with open(os.path.join(dir_path, fname), 'r') as fh:
+                for line in fh:
+                    data = line.rstrip().split(' ')
+                    username = data[0]
+                    unix_gid = int(data[2])
+                    n_blocks = int(data[3])
+
+                    ## Richard Bryan won't pre-process the data so some
+                    ## users will appear in multiple lines.  We have to
+                    ## look for them and add it together.
+                    fs_group = timepoint.setdefault(unix_gid, dict())
+                    fs_group[username] = fs_group.get(username, 0) + n_blocks
+
+            du[date] = timepoint
+
+        ## A quota block is 1024 bytes (/usr/include/sys/mount.h)
+        for timepoint in du.values():
+            for fs_group in timepoint.values():
+                for username in fs_group.keys():
+                    fs_group[username] *= 1024 # convert blocks to bytes
+        self.du = du
+
+    def gid_to_PIgroup(self):
+        grp_map = dict()
+        for grp in PI_GROUPS:
+            gid = grp.unix_gid
+            if not gid:
+                continue # guess this PI does not have a micron group
+            if grp_map.get(gid):
+                raise RuntimeError("found '%s' and '%s' with unix gid '%i'"
+                                   % (grp_map[gid], grp.pi_name, gid))
+            grp_map[gid] = grp
+        return grp_map
+
+def print_top_users(total_du, threshold=0):
+    total_du = {k:v for k,v in total_du.items() if v > threshold}
+    total_du = collections.OrderedDict(sorted(total_du.items(),
+                                              key=lambda t: t[1],
+                                              reverse=True))
+    for uid, nbytes in total_du.items():
+        print ("%6i GiB   %s (%s)"
+               % (bytes2GiB(nbytes), uid,USERNAMES.get(uid, uid)))
+
+
+def plot_total_by_time(total_du, title="Total disk usage"):
+    """Plot total disk usage over time.
+
+    Parameters
+    ----------
+      total_du: dict
+        keys should be datetime objects and values int with number of bytes.
+    """
+
+    total_du = {date : bytes2TiB(du) for date, du in total_du.items()}
+
+    fig, ax = matplotlib.pyplot.subplots()
+    ax.plot_date(*zip(*sorted(total_du.items())))
+
+    ## Only label the year but have ticks for every month.
+    ax.xaxis.set_major_locator(matplotlib.dates.YearLocator())
+    ax.xaxis.set_minor_locator(matplotlib.dates.MonthLocator())
+    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%Y'))
+
+    matplotlib.pyplot.title(title)
+    matplotlib.pyplot.ylabel("Disk Usage (TiB)")
+    matplotlib.pyplot.show()
+
+
+def plot_by_group(group_du, title="Disk usage by group", threshold=0):
+    """
+    Parameters
+    ----------
+      group_du : dict
+        keys are labels for the plot, values are number of bytes.
+      title : string
+        title for the plot
+      threshold : int
+        Entries with less than this number of bytes will be ignored.
+    """
+    group_du = {k:bytes2TiB(v) for k,v in group_du.items() if v > threshold}
+
+    ## Display sorted by group name
+    group_du = collections.OrderedDict(sorted(group_du.items(),
+                                              key=lambda t: t[0]))
+    label_pos = range(len(group_du))
+
+    fig, ax = matplotlib.pyplot.subplots()
+    ax.barh(label_pos, group_du.values(), align='center')
+    ax.set_yticks(label_pos)
+    ax.set_yticklabels(list(group_du.keys()))
+
+    ax.invert_yaxis()  # labels read top-to-bottom
+    matplotlib.pyplot.title(title)
+    matplotlib.pyplot.xlabel("Disk Usage (TiB)")
+    matplotlib.pyplot.show()
+
+
+def main(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--omero-data')
+    parser.add_argument('--fs-data')
+    args = parser.parse_args(argv)
+
+    if args.omero_data:
+        omero_du = OmeroDU(args.omero_data)
+        plot_total_by_time(omero_du.over_time(),
+                           title="OMERO disk usage")
+
+        plot_by_group(omero_du.by_pi_group(),
+                      title="OMERO disk usage by PI group",
+                      threshold=TiB2bytes(1))
+
+        plot_by_group(omero_du.by_institute(),
+                      title="OMERO disk usage by institute",
+                      threshold=TiB2bytes(1))
+
+    if args.fs_data:
+        fs_du = FSDU(args.fs_data)
+        plot_total_by_time(fs_du.over_time(),
+                           title="Micron ~ disk usage")
+
+        plot_by_group(fs_du.by_pi_group(),
+                      title="Micron ~ disk usage by PI group",
+                      threshold=TiB2bytes(1))
+
+        plot_by_group(fs_du.by_institute(),
+                      title="Micron ~ disk usage by institute",
+                      threshold=TiB2bytes(1))
+
+        users_totals = fs_du.by_users()
+        print_top_users(users_totals, threshold=TiB2bytes(0.5))
+
+    return
 
 if __name__ == "__main__":
     main(sys.argv[1:])
