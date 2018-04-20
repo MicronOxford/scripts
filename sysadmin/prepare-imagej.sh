@@ -33,16 +33,33 @@ UPDATER="ImageJ-linux64 --update"
 OMERO_PLUGIN="http://downloads.openmicroscopy.org/omero/5.3.5/artifacts/OMERO.insight-ij-5.3.5-ice36-b73.zip"
 TIMESTAMP=`date --utc '+%Y%m%d-%H%M'`
 
+## Fiji comes in a directory with a silly '.app' on the name.  Remove
+## it.  Seems like this is now ImageJ and not Fiji, even the link
+## names inside say so, so rename to ImageJ.
+FIJI_DIR="Fiji.app"
+OUT_DIR="ImageJ"
+
 zipname()
 {
-    printf "fiji-$1.zip"
+    printf "imagej-$1.zip"
+}
+
+exit_due_to_file()
+{
+    FILE=$1
+    echo "'$1' already exists. Remove it or run this from somewhere else" >&2
+    exit 1
 }
 
 download()
 {
     VERSION=$1
     URL=https://downloads.imagej.net/fiji/latest/fiji-$VERSION.zip
-    wget $URL -O `zipname $VERSION`
+    ZIPFILE=`zipname $VERSION`
+    if [ -e $ZIPFILE ]; then
+        exit_due_to_file $ZIPFILE
+    fi
+    wget $URL -O $ZIPFILE
     if [ $? -ne 0 ]; then
         echo "Failed to download Fiji from $URL" >&2
         exit 1
@@ -77,9 +94,11 @@ disable_updater()
 configure()
 {
     VERSION=$1
-    rm -rf Fiji.app
+    if [ -e $FIJI_DIR ]; then
+        exit_due_to_file $FIJI_DIR
+    fi
     unzip `zipname $VERSION`
-    cd Fiji.app
+    cd $FIJI_DIR
     update_from_site SIMcheck http://downloads.micron.ox.ac.uk/fiji_update/SIMcheck/
     install_omero_plugin
     disable_updater
@@ -89,10 +108,13 @@ configure()
 repackage()
 {
     VERSION=$1
-    rm -rf `zipname $VERSION`
-    ## Remove the silly .app part from the directory name.
-    mv Fiji.app Fiji
-    zip -0 -r `zipname $TIMESTAMP-$VERSION` Fiji
+    rm -f `zipname $VERSION`
+    if [ -e $OUT_DIR ]; then
+        exit_due_to_file $OUT_DIR
+    fi
+    mv $FIJI_DIR $OUT_DIR
+    zip -0 -r `zipname $TIMESTAMP-$VERSION` $OUT_DIR
+    rm -rf $OUT_DIR
 }
 
 for VERSION in linux64 nojre; do
