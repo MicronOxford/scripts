@@ -30,7 +30,7 @@
 set -e
 
 UPDATER="ImageJ-linux64 --update"
-OMERO_PLUGIN="http://downloads.openmicroscopy.org/omero/5.3.5/artifacts/OMERO.insight-ij-5.3.5-ice36-b73.zip"
+OMERO_PLUGIN="https://downloads.openmicroscopy.org/omero/5.4.6/artifacts/OMERO.insight-ij-5.4.6-ice36-b87.zip"
 TIMESTAMP=`date --utc '+%Y%m%d-%H%M'`
 
 ## Fiji comes in a directory with a silly '.app' on the name.  Remove
@@ -99,7 +99,7 @@ configure()
     fi
     unzip `zipname $VERSION`
     cd $FIJI_DIR
-    update_from_site SIMcheck http://downloads.micron.ox.ac.uk/fiji_update/SIMcheck/
+    update_from_site SIMcheck https://downloads.micron.ox.ac.uk/fiji_update/SIMcheck/
     install_omero_plugin
     disable_updater
     cd ..
