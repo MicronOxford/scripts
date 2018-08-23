@@ -73,8 +73,10 @@ sub print_lenses {
         warn "no magnification for objective id $id '$name'";
     }
 
-    if (defined $lenses->{wd} && $lenses->{wd} != 0.0) {
-        say "        workingDistance = $lenses->{wd};";
+    my $wd = $lenses->{wd};
+    if (defined $wd && $wd != 0.0) {
+        $wd = "$wd." unless $wd =~ /\./; # needs to be a Double
+        say "        workingDistance = $wd;";
     }
 
     my $val = $immersions{$lenses->{type}};
