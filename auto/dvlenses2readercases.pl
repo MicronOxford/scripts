@@ -135,5 +135,7 @@ while (my $line = <$pipe>) {
     my $value = $2;
 
     $value =~ s/\#.*$//;
+    ## Remove trailing whitespace.  See https://github.com/openmicroscopy/bioformats/pull/3204/files/3b8c2849fabaeeacf025eb45e670ec7bfd0e3e55#r212598980
+    $value =~ s/\s+$//;
     $lenses{$field} = $value;
 }
