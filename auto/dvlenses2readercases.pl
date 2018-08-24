@@ -37,7 +37,9 @@ my %immersions = (
 my %corrections = (
     '[DU] ?Apo' => 'Apo',
 
-    '(?<!Plan - )APOCHROMAT' => 'Apo',
+    ## Two negative lookbehind because there's no support for variable
+    ## length negative lookbehind.
+    '(?<!Plan - )(?<!Plan )Apochromat' => 'Apo',
     'Plan( - | )?Apo(chromat)?' => 'PlanApo',
 
     'Achromat' => 'Achromat',
@@ -50,7 +52,7 @@ my %corrections = (
 
     ## UV is a problem because while we can match for UV, most of them
     ## also have other type of corrections.
-    'UV' => 'UV',
+#    'UV' => 'UV',
      );
 
 
@@ -87,18 +89,26 @@ sub print_lenses {
         say "        model = \"$lenses->{pn}\";";
     }
 
+    ## TODO: we should probably be using vendor specific regexp to
+    ## guess the correct type of correction.
+    my $correction;
     ## This may not return stable results.  If there's multiple
     ## matches we don't know which of the corrections types it will
     ## pick.
-    my $found_correction = 0;
     foreach my $match (keys %corrections) {
         if ($name =~ m/\b$match\b/i) {
-            say "        correction = getCorrection(\"$corrections{$match}\");";
-            $found_correction = 1;
+            $correction = $corrections{$match};
             last;
         }
     }
-    if (! $found_correction) {
+    ## If an objective has UV correction that trumps.  We think that
+    ## all UV corrected objectives are also PlanApochromatic at least
+    ## but they would still have that written on the name.
+    $correction = "UV" if $name =~ m/\bUV\b/;
+
+    if (defined $correction) {
+        say "        correction = getCorrection(\"$correction\");";
+    } else {
         warn "no correction found for '$name'";
     }
 
