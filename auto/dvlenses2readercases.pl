@@ -83,7 +83,7 @@ sub print_lenses {
 
     my $val = $immersions{$lenses->{type}};
     die "no imersion for $lenses->{type}" unless $val;
-    say "        immersion = getImmersion(\"$val\");";
+    say "        immersion = MetadataTools.getImmersion(\"$val\");";
 
     if (defined $lenses->{pn} && $lenses->{pn} ne '?') {
         say "        model = \"$lenses->{pn}\";";
@@ -107,7 +107,7 @@ sub print_lenses {
     $correction = "UV" if $name =~ m/\bUV\b/;
 
     if (defined $correction) {
-        say "        correction = getCorrection(\"$correction\");";
+        say "        correction = MetadataTools.getCorrection(\"$correction\");";
     } else {
         warn "no correction found for '$name'";
     }
