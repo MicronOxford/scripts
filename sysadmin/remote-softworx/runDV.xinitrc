@@ -31,11 +31,8 @@
 ## Target:
 ##    OMXmaster2
 
-export DISPLAY=:0.0
-
-host="OMXsi2.bioch.ox.ac.uk"
+host="bioch2125.bioch.ox.ac.uk"
 user=`whoami`
-app="runDV"
+app="/opt/bin/runDV"
 
 xterm -e ssh -Y $user@$host $app
-

@@ -1,0 +1,23 @@
+--- startxwin	2019-12-12 17:58:05.776089856 +0000
++++ startxwin.fixed	2019-12-12 17:58:05.760089783 +0000
+@@ -31,11 +31,17 @@
+ 
+ 
+ # Automatically determine an unused $DISPLAY
+-d=0
++d=-1
+ while true ; do
+-    [ -e "/tmp/.X$d-lock" -o -S "/tmp/.X11-unix/X$d" ] || break
+-    kill -0 `cat /tmp/.X$d-lock` 2>/dev/null || break
+     d=$(($d + 1))
++    if [ -O "/tmp/.X11-unix/X$d.lock" ]; then
++        break
++    elif [ ! -e "/tmp/.X11-unix/X$d.lock" ]; then
++        [ -e "/tmp/.X$d-lock" -o -S "/tmp/.X11-unix/X$d" ] || break
++    fi
++    if [ -e /tmp/.X$d-lock ]; then
++        kill -0 `cat /tmp/.X$d-lock` 2>/dev/null || break
++    fi
+ done
+ defaultdisplay=":$d"
+ unset d
