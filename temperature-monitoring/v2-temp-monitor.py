@@ -2,6 +2,10 @@
 # Script to enable temp monitoring from v2 via prometheus.
 # copyright ian.dobbie@gmail.com 2020
 
+#Script read temperatures from the remotes via Pyro (version 3.4)
+#and then serves that information out using prometheus_client
+#which provides http on port 8000
+
 # imports
 
 from Pyro.ext import remote_nons as r
