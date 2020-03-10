@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "OMXv2"
+    static_configs:
+    - targets: ["omxmaster.bioch.ox.ac.uk:8000"]
