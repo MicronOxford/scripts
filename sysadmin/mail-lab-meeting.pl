@@ -111,8 +111,11 @@ my $next_talk_body;
 if ($talks{$next_date}) {
   $subject = "Micron-NanO lab meeting tomorrow at 2 pm";
   $next_talk_body = <<EOF;
-We will meet tomorrow at 2 pm in the 1st floor seminar room in Biochemistry.
-The speaker will be $talks{$next_date}.
+We will meet tomorrow at 2 pm on Microsoft Teams.  The speaker will
+be $talks{$next_date}.
+
+Please connect without video as this significant enhances the quality
+of the sound for all users.
 EOF
 } else {
   $subject = "No Micron-NanO lab meeting tomorrow";
