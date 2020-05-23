@@ -19,7 +19,7 @@ schermellehgroup = 503 # schermellehgroup
 basepath = ''
 
 all_experiment_defs = {
-    # For experimentA the 575 files required are found in my OMERO profile under:
+    # For experimentA the 574 files required are found in my OMERO profile under:
     # Miron-C127-G1/EM16-09-A-G1/*_SIR_EAL_THR.tif
     # Miron-C127-G1/EM16-09-B-G1/*_SIR_EAL_THR.tif
     # Miron-C127-G1/EM16-12-A/*_SIR_EAL_THR.tif
@@ -60,9 +60,9 @@ all_experiment_defs = {
     # Miron-C127-EdU/EM16-12-D-LS/*_SIR_EAL_THR.tif
     # Miron-C127-EdU/EM16-12-D-MS/*_SIR_EAL_THR.tif
     # Then in Roel Oldenkamp's profile under:
-    # C127-ES/[all directories]/*_SIR_ALN_THR.tif
-    # C127-LS/[all directories]/*_SIR_ALN_THR.tif
-    # C127-MS/[all directories]/*_SIR_ALN_THR.tif
+    # C127-ES/[all directories]/*_FUS_SIR_ALN_THR.tif
+    # C127-LS/[all directories]/*_FUS_SIR_ALN_THR.tif
+    # C127-MS/[all directories]/*_FUS_SIR_ALN_THR.tif
     'experimentB' : [
         {
             'userID' : 952, # Ezequiel
@@ -80,7 +80,7 @@ all_experiment_defs = {
             'userID' : 3453, # Roel
             'project' : '^C127-(E|L|M)S$',
             'dataset' : '.*',
-            'image' : '.*_SIR_ALN_THR.tif$',
+            'image' : '.*_FUS_SIR_ALN_THR.tif$',
         },
     ],
     # Finally For experimentC the 92 files required are found in Roel Oldenkamp's OMERO profile under:
