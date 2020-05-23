@@ -64,35 +64,35 @@ all_experiment_defs = {
     # C127-LS/[all directories]/*_SIR_ALN_THR.tif
     # C127-MS/[all directories]/*_SIR_ALN_THR.tif
     'experimentB' : [
-        # {
-        #     'userID' : 952, # Ezequiel
-        #     'project' : '^Miron-C127-EdU$',
-        #     'dataset' : '^EM16-09-(A|B)-EdU$',
-        #     'image' : '.*_SIR_EAL_THR.tif$',
-        # },
-        # {
-        #     'userID' : 952, # Ezequiel
-        #     'project' : '^Miron-C127-EdU$',
-        #     'dataset' : '^EM16-12-D-(E|L|M)S$',
-        #     'image' : '.*_SIR_EAL_THR.tif$',
-        # },
-        # {
-        #     'userID' : 3453, # Roel
-        #     'project' : '^C127-(E|L|M)S$',
-        #     'dataset' : '.*',
-        #     'image' : '.*_SIR_ALN_THR.tif$',
-        # },
+        {
+            'userID' : 952, # Ezequiel
+            'project' : '^Miron-C127-EdU$',
+            'dataset' : '^EM16-09-(A|B)-EdU$',
+            'image' : '.*_SIR_EAL_THR.tif$',
+        },
+        {
+            'userID' : 952, # Ezequiel
+            'project' : '^Miron-C127-EdU$',
+            'dataset' : '^EM16-12-D-(E|L|M)S$',
+            'image' : '.*_SIR_EAL_THR.tif$',
+        },
+        {
+            'userID' : 3453, # Roel
+            'project' : '^C127-(E|L|M)S$',
+            'dataset' : '.*',
+            'image' : '.*_SIR_ALN_THR.tif$',
+        },
     ],
     # Finally For experimentC the 92 files required are found in Roel Oldenkamp's OMERO profile under:
     # HCT116SCC1mAID-6haux/[all directories]/*_SIR_ALN_THR.tif
     # HCT116SCC1mAID-16hdox-6haux/[all directories]/*_SIR_ALN_THR.tif
     'experimentC' : [
-        # {
-        #     'userID' : 3453, # Roel
-        #     'project' : '^HCT116SCC1mAID(-16hdox)?-6haux$',
-        #     'dataset' : '.*',
-        #     'image' : '.*_SIR_ALN_THR.tif$',
-        # },
+        {
+            'userID' : 3453, # Roel
+            'project' : '^HCT116SCC1mAID(-16hdox)?-6haux$',
+            'dataset' : '.*',
+            'image' : '.*_SIR_ALN_THR.tif$',
+        },
     ],
 }
 
