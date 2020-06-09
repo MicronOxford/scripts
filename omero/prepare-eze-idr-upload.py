@@ -94,6 +94,15 @@ all_experiment_defs = {
             'image' : '.*_SIR_ALN_THR.tif$',
         },
     ],
+    # Added by Lothar later.
+    'experimentD' : [
+        {
+            'userID' : 352, # Lothar
+            'project' : '^Miron_FIB-SEM$',
+            'dataset' : '^Miron_FIB-SEM_processed$',
+            'image' : '.*',
+        },
+    ],
 }
 
 
