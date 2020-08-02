@@ -30,7 +30,7 @@
 set -e
 
 UPDATER="ImageJ-linux64 --update"
-OMERO_PLUGIN="https://downloads.openmicroscopy.org/omero/5.4.6/artifacts/OMERO.insight-ij-5.4.6-ice36-b87.zip"
+OMERO_PLUGIN="https://github.com/ome/omero-insight/releases/download/v5.5.12/omero_ij-5.5.12-all.jar"
 TIMESTAMP=`date --utc '+%Y%m%d-%H%M'`
 
 ## Fiji comes in a directory with a silly '.app' on the name.  Remove
@@ -76,10 +76,8 @@ update_from_site()
 
 install_omero_plugin()
 {
-    FNAME="OMERO.insight-ip.zip"
-    wget $OMERO_PLUGIN -O $FNAME
-    unzip $FNAME -d plugins/
-    rm $FNAME
+    FNAME="omero_ij-all.jar"
+    wget $OMERO_PLUGIN -O plugins/$FNAME
 }
 
 disable_updater()
