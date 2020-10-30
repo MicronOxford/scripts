@@ -30,7 +30,7 @@
 set -e
 
 UPDATER="ImageJ-linux64 --update"
-OMERO_PLUGIN="https://github.com/ome/omero-insight/releases/download/v5.5.12/omero_ij-5.5.12-all.jar"
+OMERO_PLUGIN="https://github.com/ome/omero-insight/releases/download/v5.5.14/omero_ij-5.5.14-all.jar"
 TIMESTAMP=`date --utc '+%Y%m%d-%H%M'`
 
 ## Fiji comes in a directory with a silly '.app' on the name.  Remove
