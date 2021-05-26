@@ -49,7 +49,7 @@ use Email::Valid;                       # confirm it's not gibberish
 use LWP::Simple;                        # get wiki page
 use DateTime;                           # date comparisons
 
-my $from  = 'Ian Dobbie <ian.dobbie@bioch.ox.ac.uk>';
+my $from  = 'Deirdre Kavanagh <deirdre.kavanagh@bioch.ox.ac.uk>';
 my $wiki  = 'http://wiki.micron.ox.ac.uk/w/Speakers_at_lab_meetings';
 
 my @tos;      # valid emails to deliver the message
